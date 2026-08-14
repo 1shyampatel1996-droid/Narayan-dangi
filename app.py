@@ -21,15 +21,15 @@ sensex_fut_open, sensex_fut_fin = "78278.0", "325"
 n_col1, n_col2 = get_color(nifty_idx_open, nifty_idx_fin)
 s_col1, s_col2 = get_color(sensex_idx_open, sensex_idx_fin)
 
-# फंक्शन: एक सीधी लाइन में डेटा दिखाने के लिए
-def show_row(name, price, fin_val, color):
-    col1, col2, col3 = st.columns([2.5, 2, 1.5])
-    with col1:
-        st.markdown(f"**{name}**")
-    with col2:
+# एक ही लाइन में कॉलम के जरिए डेटा दिखाने का फंक्शन
+def show_row(col_name, price, fin_val, color):
+    c1, c2, c3 = st.columns([1.5, 1.5, 1])
+    with c1:
+        st.markdown(f"**{col_name}**")
+    with c2:
         st.markdown(f"{price}")
-    with col3:
-        st.markdown(f"<span style='color:{color}'>{fin_val}</span>", unsafe_allow_html=True)
+    with c3:
+        st.markdown(f"<span style='color:{color}'><b>{fin_val}</b></span>", unsafe_allow_html=True)
 
 # 1. Nifty Group
 st.markdown("### 1. Nifty Group")
