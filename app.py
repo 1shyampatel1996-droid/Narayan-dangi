@@ -96,37 +96,80 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
-# --- 3. Bitcoin Group (एक सीधी लाइन में परफेक्ट फॉर्मेट) ---
+# --- Bitcoin & Ethereum के लिए डेटा फेचिंग और डिस्प्ले कोड ---
+
+def get_crypto_strict_data(ticker_symbol):
+    try:
+        df = yf.Ticker(ticker_symbol).history(period="2d", interval="1d")
+        if df.empty or 'Open' not in df.columns:
+            return 0.0, 0, 0
+        
+        open_price = float(df['Open'].iloc[-1])
+        if pd.isna(open_price) or open_price <= 0:
+            open_price = float(df['Open'].iloc[-2])
+            
+        price_str = f"{open_price:.2f}".replace(".", "").replace(",", "")
+        digit_sum = sum(int(char) for char in price_str if char.isdigit())
+        
+        temp_sum = digit_sum
+        while temp_sum >= 10:
+            temp_sum = sum(int(c) for c in str(temp_sum))
+        
+        if digit_sum < 10:
+            final_digit = digit_sum * 100 + digit_sum * 10 + temp_sum
+        else:
+            final_digit = (digit_sum * 10) + temp_sum
+            
+        third_digit = final_digit % 10
+        return open_price, final_digit, third_digit
+    except Exception:
+        return 0.0, 0, 0
+
+# डेटा फेच करना
+btc_cb_open, btc_cb_dig, btc_cb_third = get_crypto_strict_data("BTC-USD")
+btc_cme_open, btc_cme_dig, btc_cme_third = get_crypto_strict_data("BTC=F")
+
+eth_cb_open, eth_cb_dig, eth_cb_third = get_crypto_strict_data("ETH-USD")
+eth_cme_open, eth_cme_dig, eth_cme_third = get_crypto_strict_data("ETH=F")
+
+# कलर कंपेरिजन
+btc_cb_col = "green" if btc_cb_third >= btc_cme_third else "red"
+btc_cme_col = "green" if btc_cme_third >= btc_cb_third else "red"
+
+eth_cb_col = "green" if eth_cb_third >= eth_cme_third else "red"
+eth_cme_col = "green" if eth_cme_third >= eth_cb_third else "red"
+
+# --- 3. Bitcoin Group ---
 st.markdown("---")
 st.markdown("### 3. Bitcoin Group")
 
 st.markdown(f"""
 <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;'>
-    <span style='font-weight: 500;'>Bitcoin</span>
-    <span>{btc_cb_open:,.2f}</span>
-    <span style='color: {btc_cb_col}; font-weight: bold;'>{btc_cb_dig}</span>
+    <span style='width: 40%; font-weight: 500;'>Bitcoin</span>
+    <span style='width: 35%; text-align: right;'>{btc_cb_open:,.2f}</span>
+    <span style='width: 20%; text-align: right; color: {btc_cb_col}; font-weight: bold;'>{btc_cb_dig}</span>
 </div>
 <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;'>
-    <span style='font-weight: 500;'>Future</span>
-    <span>{btc_cme_open:,.2f}</span>
-    <span style='color: {btc_cme_col}; font-weight: bold;'>{btc_cme_dig}</span>
+    <span style='width: 40%; font-weight: 500;'>Future</span>
+    <span style='width: 35%; text-align: right;'>{btc_cme_open:,.2f}</span>
+    <span style='width: 20%; text-align: right; color: {btc_cme_col}; font-weight: bold;'>{btc_cme_dig}</span>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 4. Ethereum Group (एक सीधी लाइन में परफेक्ट फॉर्मेट) ---
+# --- 4. Ethereum Group ---
 st.markdown("---")
 st.markdown("### 4. Ethereum Group")
 
 st.markdown(f"""
 <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;'>
-    <span style='font-weight: 500;'>Ethereum</span>
-    <span>{eth_cb_open:,.2f}</span>
-    <span style='color: {eth_cb_col}; font-weight: bold;'>{eth_cb_dig}</span>
+    <span style='width: 40%; font-weight: 500;'>Ethereum</span>
+    <span style='width: 35%; text-align: right;'>{eth_cb_open:,.2f}</span>
+    <span style='width: 20%; text-align: right; color: {eth_cb_col}; font-weight: bold;'>{eth_cb_dig}</span>
 </div>
 <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;'>
-    <span style='font-weight: 500;'>Future</span>
-    <span>{eth_cme_open:,.2f}</span>
-    <span style='color: {eth_cme_col}; font-weight: bold;'>{eth_cme_dig}</span>
+    <span style='width: 40%; font-weight: 500;'>Future</span>
+    <span style='width: 35%; text-align: right;'>{eth_cme_open:,.2f}</span>
+    <span style='width: 20%; text-align: right; color: {eth_cme_col}; font-weight: bold;'>{eth_cme_dig}</span>
 </div>
 """, unsafe_allow_html=True)
 
