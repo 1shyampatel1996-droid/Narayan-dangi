@@ -1,3 +1,7 @@
 streamlit
 smartapi-python
 pyotp
+logzero
+websocket-client
+urllib3
+requests
