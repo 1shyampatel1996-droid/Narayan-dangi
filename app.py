@@ -1,3 +1,13 @@
+import subprocess
+import sys
+
+# यह ऑटोमैटिकली चेक करेगा और पैकेज इंस्टॉल कर देगा
+try:
+    import smartapi
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "smartapi-python"])
+
+# अब आपके नॉर्मल इम्पोर्ट्स
 import pyotp
 import streamlit as st
 from smartapi.smartConnect import SmartConnect
