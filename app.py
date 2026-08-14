@@ -96,83 +96,38 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
-import yfinance as yf
-import streamlit as st
-
-# --- सही टिकर सिंबल के साथ डेटा और 3-डिजिट कैलकुलेट करने का फंक्शन ---
-def get_crypto_data(ticker_symbol):
-    try:
-        # डे की कैंडल (period="1d") का ओपन प्राइस लेना
-        df = yf.Ticker(ticker_symbol).history(period="1d")
-        if df.empty:
-            return 0.0, 0, 0
-        
-        open_price = df['Open'].iloc[-1]
-        
-        # 1. ओपन प्राइस के सभी अंकों का योग निकालना
-        price_str = str(open_price).replace(".", "")
-        digit_sum = sum(int(char) for char in price_str if char.isdigit())
-        
-        # 2. सिंगल डिजिट बनाना
-        temp_sum = digit_sum
-        while temp_sum >= 10:
-            temp_sum = sum(int(c) for c in str(temp_sum))
-        
-        # 3. 3-डिजिट नंबर बनाना (जैसे 19 से 191)
-        if digit_sum < 10:
-            final_digit = digit_sum * 100 + digit_sum * 10 + temp_sum
-        else:
-            final_digit = (digit_sum * 10) + temp_sum
-            
-        # 4. तीसरा (आखिरी) डिजिट निकालना
-        third_digit = final_digit % 10
-        
-        return open_price, final_digit, third_digit
-    except Exception:
-        return 0.0, 0, 0
-
-# --- चारों के लिए उनकी सही कैंडल और टिकर से डेटा फेच करना ---
-# Bitcoin Coinbase Spot & CME Future
-btc_cb_open, btc_cb_dig, btc_cb_third = get_crypto_data("BTC-USD")
-btc_cme_open, btc_cme_dig, btc_cme_third = get_crypto_data("BTC=F")
-
-# Ethereum Coinbase Spot & CME Future
-eth_cb_open, eth_cb_dig, eth_cb_third = get_crypto_data("ETH-USD")
-eth_cme_open, eth_cme_dig, eth_cme_third = get_crypto_data("ETH=F")
-
-# --- आपस में तीसरे डिजिट का कंपेरिजन करके कलर तय करना ---
-btc_cb_col = "green" if btc_cb_third >= btc_cme_third else "red"
-btc_cme_col = "green" if btc_cme_third >= btc_cb_third else "red"
-
-eth_cb_col = "green" if eth_cb_third >= eth_cme_third else "red"
-eth_cme_col = "green" if eth_cme_third >= eth_cb_third else "red"
-
-# --- 3. Bitcoin Group ---
+# --- 3. Bitcoin Group (एक सीधी लाइन में परफेक्ट फॉर्मेट) ---
 st.markdown("---")
 st.markdown("### 3. Bitcoin Group")
 
-col1, col2, col3 = st.columns([2, 2, 1])
-col1.write("Bitcoin")
-col2.markdown(f"<div style='text-align: right;'>{btc_cb_open:,.2f}</div>", unsafe_allow_html=True)
-col3.markdown(f"<div style='text-align: right; color: {btc_cb_col}; font-weight: bold;'>{btc_cb_dig}</div>", unsafe_allow_html=True)
+st.markdown(f"""
+<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;'>
+    <span style='font-weight: 500;'>Bitcoin</span>
+    <span>{btc_cb_open:,.2f}</span>
+    <span style='color: {btc_cb_col}; font-weight: bold;'>{btc_cb_dig}</span>
+</div>
+<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;'>
+    <span style='font-weight: 500;'>Future</span>
+    <span>{btc_cme_open:,.2f}</span>
+    <span style='color: {btc_cme_col}; font-weight: bold;'>{btc_cme_dig}</span>
+</div>
+""", unsafe_allow_html=True)
 
-col1, col2, col3 = st.columns([2, 2, 1])
-col1.write("Future")
-col2.markdown(f"<div style='text-align: right;'>{btc_cme_open:,.2f}</div>", unsafe_allow_html=True)
-col3.markdown(f"<div style='text-align: right; color: {btc_cme_col}; font-weight: bold;'>{btc_cme_dig}</div>", unsafe_allow_html=True)
-
-# --- 4. Ethereum Group ---
+# --- 4. Ethereum Group (एक सीधी लाइन में परफेक्ट फॉर्मेट) ---
 st.markdown("---")
 st.markdown("### 4. Ethereum Group")
 
-col1, col2, col3 = st.columns([2, 2, 1])
-col1.write("Ethereum")
-col2.markdown(f"<div style='text-align: right;'>{eth_cb_open:,.2f}</div>", unsafe_allow_html=True)
-col3.markdown(f"<div style='text-align: right; color: {eth_cb_col}; font-weight: bold;'>{eth_cb_dig}</div>", unsafe_allow_html=True)
-
-col1, col2, col3 = st.columns([2, 2, 1])
-col1.write("Future")
-col2.markdown(f"<div style='text-align: right;'>{eth_cme_open:,.2f}</div>", unsafe_allow_html=True)
-col3.markdown(f"<div style='text-align: right; color: {eth_cme_col}; font-weight: bold;'>{eth_cme_dig}</div>", unsafe_allow_html=True)
+st.markdown(f"""
+<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;'>
+    <span style='font-weight: 500;'>Ethereum</span>
+    <span>{eth_cb_open:,.2f}</span>
+    <span style='color: {eth_cb_col}; font-weight: bold;'>{eth_cb_dig}</span>
+</div>
+<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;'>
+    <span style='font-weight: 500;'>Future</span>
+    <span>{eth_cme_open:,.2f}</span>
+    <span style='color: {eth_cme_col}; font-weight: bold;'>{eth_cme_dig}</span>
+</div>
+""", unsafe_allow_html=True)
 
 st.markdown("---")
