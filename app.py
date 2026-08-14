@@ -21,24 +21,35 @@ sensex_fut_open, sensex_fut_fin = "78278.0", "325"
 n_col1, n_col2 = get_color(nifty_idx_open, nifty_idx_fin)
 s_col1, s_col2 = get_color(sensex_idx_open, sensex_idx_fin)
 
-# एक ही लाइन में कॉलम के जरिए डेटा दिखाने का फंक्शन
-def show_row(col_name, price, fin_val, color):
-    c1, c2, c3 = st.columns([1.5, 1.5, 1])
-    with c1:
-        st.markdown(f"**{col_name}**")
-    with c2:
-        st.markdown(f"{price}")
-    with c3:
-        st.markdown(f"<span style='color:{color}'><b>{fin_val}</b></span>", unsafe_allow_html=True)
+# HTML टेबल फॉर्मेट ताकि मोबाइल पर भी एक ही लाइन में रहे
+html_code = f"""
+<div style="font-size: 16px; line-height: 2.2;">
+    <b>1. Nifty Group</b><br>
+    <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+        <span style="width: 40%;"><b>Nifty 50</b></span>
+        <span style="width: 35%; text-align: right;">{nifty_idx_open}</span>
+        <span style="width: 20%; text-align: right; color: {n_col2}; font-weight: bold;">{nifty_idx_fin}</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+        <span style="width: 40%;"><b>Future</b></span>
+        <span style="width: 35%; text-align: right;">{nifty_fut_open}</span>
+        <span style="width: 20%; text-align: right; color: {n_col1}; font-weight: bold;">{nifty_fut_fin}</span>
+    </div>
+    
+    <hr style="margin: 10px 0;">
+    
+    <b>2. Sensex Group</b><br>
+    <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+        <span style="width: 40%;"><b>Sensex</b></span>
+        <span style="width: 35%; text-align: right;">{sensex_idx_open}</span>
+        <span style="width: 20%; text-align: right; color: {s_col2}; font-weight: bold;">{sensex_idx_fin}</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+        <span style="width: 40%;"><b>Future</b></span>
+        <span style="width: 35%; text-align: right;">{sensex_fut_open}</span>
+        <span style="width: 20%; text-align: right; color: {s_col1}; font-weight: bold;">{sensex_fut_fin}</span>
+    </div>
+</div>
+"""
 
-# 1. Nifty Group
-st.markdown("### 1. Nifty Group")
-show_row("Nifty 50", nifty_idx_open, nifty_idx_fin, n_col2)
-show_row("Future", nifty_fut_open, nifty_fut_fin, n_col1)
-
-st.markdown("---")
-
-# 2. Sensex Group
-st.markdown("### 2. Sensex Group")
-show_row("Sensex", sensex_idx_open, sensex_idx_fin, s_col2)
-show_row("Future", sensex_fut_open, sensex_fut_fin, s_col1)
+st.markdown(html_code, unsafe_allow_html=True)
