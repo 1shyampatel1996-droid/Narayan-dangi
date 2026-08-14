@@ -1,6 +1,7 @@
 import pyotp
 import streamlit as st
-from SmartApi import SmartConnect
+from smartapi.smartConnect import SmartConnect
+
 
 # पेज सेटअप
 st.set_page_config(page_title="Market Live App", layout="wide")
