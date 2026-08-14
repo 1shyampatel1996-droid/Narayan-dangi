@@ -5,3 +5,5 @@ logzero
 websocket-client
 urllib3
 requests
+streamlit
+yfinance
