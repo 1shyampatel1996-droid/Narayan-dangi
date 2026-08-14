@@ -96,8 +96,10 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
-# --- Bitcoin & Ethereum के लिए डेटा फेचिंग और डिस्प्ले कोड ---
+import yfinance as yf
+import pandas as pd
 
+# --- Bitcoin & Ethereum के लिए सही डेटा और डिजिट लॉजिक ---
 def get_crypto_strict_data(ticker_symbol):
     try:
         df = yf.Ticker(ticker_symbol).history(period="2d", interval="1d")
