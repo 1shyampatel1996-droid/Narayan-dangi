@@ -99,7 +99,7 @@ st.markdown(
 import yfinance as yf
 import pandas as pd
 
-# --- Bitcoin & Ethereum के लिए सही डेटा और डिजिट लॉजिक ---
+# --- Coinbase Spot और CME Futures के लिए सही डेटा और डिजिट लॉजिक ---
 def get_crypto_strict_data(ticker_symbol):
     try:
         df = yf.Ticker(ticker_symbol).history(period="2d", interval="1d")
@@ -127,12 +127,12 @@ def get_crypto_strict_data(ticker_symbol):
     except Exception:
         return 0.0, 0, 0
 
-# डेटा फेच करना
-btc_cb_open, btc_cb_dig, btc_cb_third = get_crypto_strict_data("BTC-USD")
-btc_cme_open, btc_cme_dig, btc_cme_third = get_crypto_strict_data("BTC=F")
+# डेटा फेच करना (Coinbase Spot और CME Futures)
+btc_cb_open, btc_cb_dig, btc_cb_third = get_crypto_strict_data("BTC-USD")  # Coinbase Spot
+btc_cme_open, btc_cme_dig, btc_cme_third = get_crypto_strict_data("BTC=F")  # CME Future
 
-eth_cb_open, eth_cb_dig, eth_cb_third = get_crypto_strict_data("ETH-USD")
-eth_cme_open, eth_cme_dig, eth_cme_third = get_crypto_strict_data("ETH=F")
+eth_cb_open, eth_cb_dig, eth_cb_third = get_crypto_strict_data("ETH-USD")  # Coinbase Spot
+eth_cme_open, eth_cme_dig, eth_cme_third = get_crypto_strict_data("ETH=F")  # CME Future
 
 # कलर कंपेरिजन
 btc_cb_col = "green" if btc_cb_third >= btc_cme_third else "red"
