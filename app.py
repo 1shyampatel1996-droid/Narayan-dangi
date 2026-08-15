@@ -96,11 +96,40 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+import requests
 import yfinance as yf
 import pandas as pd
 
-# --- Coinbase Spot और CME Futures के लिए सही डेटा और डिजिट लॉजिक ---
-def get_crypto_strict_data(ticker_symbol):
+# --- 1. Coinbase Official API से Spot डेटा लाने के लिए फंक्शन ---
+def get_coinbase_spot_data(product_symbol):
+    try:
+        url = f"https://api.coinbase.com/v2/prices/{product_symbol}/spot"
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            open_price = float(data['data']['amount'])
+            
+            # डिजिट-सम कैलकुलेशन
+            price_str = f"{open_price:.2f}".replace(".", "").replace(",", "")
+            digit_sum = sum(int(char) for char in price_str if char.isdigit())
+            
+            temp_sum = digit_sum
+            while temp_sum >= 10:
+                temp_sum = sum(int(c) for c in str(temp_sum))
+            
+            if digit_sum < 10:
+                final_digit = digit_sum * 100 + digit_sum * 10 + temp_sum
+            else:
+                final_digit = (digit_sum * 10) + temp_sum
+                
+            third_digit = final_digit % 10
+            return open_price, final_digit, third_digit
+    except Exception:
+        pass
+    return 0.0, 0, 0
+
+# --- 2. CME Futures के लिए yfinance वाला फंक्शन ---
+def get_cme_future_data(ticker_symbol):
     try:
         df = yf.Ticker(ticker_symbol).history(period="2d", interval="1d")
         if df.empty or 'Open' not in df.columns:
@@ -127,12 +156,12 @@ def get_crypto_strict_data(ticker_symbol):
     except Exception:
         return 0.0, 0, 0
 
-# डेटा फेच करना (Coinbase Spot और CME Futures)
-btc_cb_open, btc_cb_dig, btc_cb_third = get_crypto_strict_data("BTC-USD")  # Coinbase Spot
-btc_cme_open, btc_cme_dig, btc_cme_third = get_crypto_strict_data("BTC=F")  # CME Future
+# डेटा फेच करना (Coinbase Spot API और CME Futures)
+btc_cb_open, btc_cb_dig, btc_cb_third = get_coinbase_spot_data("BTC-USD")  # Coinbase Spot API
+btc_cme_open, btc_cme_dig, btc_cme_third = get_cme_future_data("BTC=F")     # CME Future
 
-eth_cb_open, eth_cb_dig, eth_cb_third = get_crypto_strict_data("ETH-USD")  # Coinbase Spot
-eth_cme_open, eth_cme_dig, eth_cme_third = get_crypto_strict_data("ETH=F")  # CME Future
+eth_cb_open, eth_cb_dig, eth_cb_third = get_coinbase_spot_data("ETH-USD")  # Coinbase Spot API
+eth_cme_open, eth_cme_dig, eth_cme_third = get_cme_future_data("ETH=F")     # CME Future
 
 # कलर कंपेरिजन
 btc_cb_col = "green" if btc_cb_third >= btc_cme_third else "red"
@@ -141,7 +170,7 @@ btc_cme_col = "green" if btc_cme_third >= btc_cb_third else "red"
 eth_cb_col = "green" if eth_cb_third >= eth_cme_third else "red"
 eth_cme_col = "green" if eth_cme_third >= eth_cb_third else "red"
 
-# --- 3. Bitcoin Group ---
+# --- 3. Bitcoin Group UI ---
 st.markdown("---")
 st.markdown("### 3. Bitcoin Group")
 
@@ -158,7 +187,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 4. Ethereum Group ---
+# --- 4. Ethereum Group UI ---
 st.markdown("---")
 st.markdown("### 4. Ethereum Group")
 
