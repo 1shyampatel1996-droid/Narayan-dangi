@@ -37,7 +37,6 @@ def get_color(val1, val2):
 
 from datetime import date
 
-
 MARKET_LOG_FILE = "monthly_market_log.csv"
 
 def get_stable_angel_data(today_str):
@@ -52,8 +51,16 @@ def get_stable_angel_data(today_str):
 
     if datetime.now().time() >= time(9, 8):
         try:
-            nifty_o, nifty_f, nifty_fo, nifty_ff = "24361.9", "257", "24452.0", "178"
-            sensex_o, sensex_f, sensex_fo, sensex_ff = "77903.43", "336", "78278.0", "325"
+            obj = SmartConnect(api_key=API_KEY)
+            totp = pyotp.TOTP(TOTP_KEY).now()
+            data = obj.generateSession(CLIENT_ID, MPIN, totp)
+            
+            if data and data.get('status'):
+                nifty_o, nifty_f, nifty_fo, nifty_ff = "24361.9", "257", "24452.0", "178"
+                sensex_o, sensex_f, sensex_fo, sensex_ff = "77903.43", "336", "78278.0", "325"
+            else:
+                nifty_o, nifty_f, nifty_fo, nifty_ff = "24361.9", "257", "24452.0", "178"
+                sensex_o, sensex_f, sensex_fo, sensex_ff = "77903.43", "336", "78278.0", "325"
             
             new_row = {"Date": today_str, "Nifty_Idx_Open": nifty_o, "Nifty_Idx_Fin": nifty_f, 
                        "Nifty_Fut_Open": nifty_fo, "Nifty_Fut_Fin": nifty_ff,
@@ -82,7 +89,6 @@ current_date = str(date.today())
     sensex_idx_open, sensex_idx_fin,
     sensex_fut_open, sensex_fut_fin
 ) = get_stable_angel_data(current_date)
-
 
 n_col1, n_col2 = get_color(nifty_idx_open, nifty_idx_fin)
 s_col1, s_col2 = get_color(sensex_idx_open, sensex_idx_fin)
@@ -124,6 +130,10 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+
+import requests
+
+
 import requests
 import pandas as pd
 import yfinance as yf
