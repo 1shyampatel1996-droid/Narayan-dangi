@@ -16,16 +16,13 @@ CLIENT_ID = "N417637"
 PIN = "1003"
 TOTP_SECRET = "2YRKKEYE2HZD562KPXZTK7PXJY"
 
-# साइडबार में रिफ्रेश बटन
-st.sidebar.title("Controls")
-if st.sidebar.button("🔄 Refresh Market Data"):
-    st.rerun()
-
 def get_angel_one_data(symbol_token, exchange="NSE"):
     open_price = 0.0
     try:
         obj = SmartConnect(api_key=API_KEY)
+        # pyotp के जरिए हर 30 सेकंड में ऑटोमैटिक कोड जनरेट होगा
         generated_totp = pyotp.TOTP(TOTP_SECRET).now()
+        
         data = obj.generateSession(CLIENT_ID, PIN, generated_totp)
         
         if data and data.get('status'):
@@ -62,7 +59,7 @@ def get_angel_one_data(symbol_token, exchange="NSE"):
     third_digit = final_digit % 10
     return open_price, final_digit, third_digit
 
-# भारतीय मार्केट डेटा फेच करना
+# भारतीय मार्केट डेटा फेच करना (इंडिपेंडेंट डेटा फीड)
 nifty_open, nifty_dig, nifty_third = get_angel_one_data("99926000", exchange="NSE")
 nifty_fut_open, nifty_fut_dig, nifty_fut_third = get_angel_one_data("YOUR_NIFTY_FUTURE_TOKEN", exchange="NFO")
 
@@ -114,7 +111,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- क्रिप्टो डेटा (Coinbase & CME yfinance - बिल्कुल सुरक्षित और यथावत) ---
+# --- Crypto डेटा (Coinbase & CME yfinance) ---
 def get_coinbase_daily_open(product_id):
     try:
         url = f"https://api.exchange.coinbase.com/products/{product_id}/candles?granularity=86400"
