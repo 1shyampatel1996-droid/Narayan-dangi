@@ -7,8 +7,8 @@ import pandas as pd
 st.set_page_config(page_title="Market Live App", layout="wide")
 st.title("Market Live Data Dashboard")
 
-# --- फंक्शन: Nifty और Sensex डेटा के लिए ---
-def get_market_data(ticker_symbol):
+# --- फंक्शन: केवल रियल ओपन प्राइस फेच करने के लिए (बिना किसी फेरबदल के) ---
+def get_real_market_data(ticker_symbol):
     try:
         df = yf.Ticker(ticker_symbol).history(period="2d", interval="1d")
         if df.empty or 'Open' not in df.columns:
@@ -36,14 +36,12 @@ def get_market_data(ticker_symbol):
     except Exception:
         return 0.0, 0, 0
 
-# डेटा फेच करना
-nifty_open, nifty_dig, nifty_third = get_market_data("^NSEI")
-nifty_fut_open, nifty_fut_dig, nifty_fut_third = get_market_data("NIFTY=F")
-if nifty_fut_open == 0:  # यदि फ्यूचर सिंबल न मिले तो स्पॉट का उपयोग कर प्रॉक्सी सेट करें
-    nifty_fut_open, nifty_fut_dig, nifty_fut_third = nifty_open, nifty_dig, nifty_third
+# वास्तविक डेटा फेच करना (रियल टिकर्स के साथ)
+nifty_open, nifty_dig, nifty_third = get_real_market_data("^NSEI")
+nifty_fut_open, nifty_fut_dig, nifty_fut_third = get_real_market_data("NIFTY=F")
 
-sensex_open, sensex_dig, sensex_third = get_market_data("^BSESN")
-sensex_fut_open, sensex_fut_dig, sensex_fut_third = sensex_open, sensex_dig, sensex_third
+sensex_open, sensex_dig, sensex_third = get_real_market_data("^BSESN")
+sensex_fut_open, sensex_fut_dig, sensex_fut_third = get_real_market_data("BSESN=F") # यदि टिकर उपलब्ध हो
 
 # कलर कंपेरिजन
 n_col1 = "green" if nifty_third >= nifty_fut_third else "red"
