@@ -40,43 +40,34 @@ from datetime import date
 MARKET_LOG_FILE = "monthly_market_log.csv"
 
 def get_stable_angel_data(today_str):
-    if os.path.exists(MARKET_LOG_FILE):
-        df = pd.read_csv(MARKET_LOG_FILE)
-        if today_str in df['Date'].values:
-            row = df[df['Date'] == today_str].iloc[0]
-            if str(row['Nifty_Idx_Open']) != "0.0":
-                return str(row['Nifty_Idx_Open']), str(row['Nifty_Idx_Fin']), \
-                       str(row['Nifty_Fut_Open']), str(row['Nifty_Fut_Fin']), \
-                       str(row['Sensex_Idx_Open']), str(row['Sensex_Idx_Fin']), \
-                       str(row['Sensex_Fut_Open']), str(row['Sensex_Fut_Fin'])
-
     try:
         obj = SmartConnect(api_key=API_KEY)
         totp = pyotp.TOTP(TOTP_KEY).now()
         data = obj.generateSession(CLIENT_ID, MPIN, totp)
         
         if data and data.get('status'):
-            nifty_o, nifty_f, nifty_fo, nifty_ff = "24361.9", "257", "24452.0", "178"
-            sensex_o, sensex_f, sensex_fo, sensex_ff = "77903.43", "336", "78278.0", "325"
+            nifty_spot = obj.ltpData("NSE", "Nifty 50", "99926000")
+            nifty_fut = obj.ltpData("NFO", "NIFTY FUT", "")
             
-            new_row = {"Date": today_str, "Nifty_Idx_Open": nifty_o, "Nifty_Idx_Fin": nifty_f, 
-                       "Nifty_Fut_Open": nifty_fo, "Nifty_Fut_Fin": nifty_ff,
-                       "Sensex_Idx_Open": sensex_o, "Sensex_Idx_Fin": sensex_f, 
-                       "Sensex_Fut_Open": sensex_fo, "Sensex_Fut_Fin": sensex_ff}
+            sensex_spot = obj.ltpData("BSE", "SENSEX", "1")
+            sensex_fut = obj.ltpData("BFO", "SENSEX FUT", "")
+
+            nifty_o = str(nifty_spot.get('data', {}).get('ltp', 0.0))
+            nifty_f = str(nifty_spot.get('data', {}).get('netChange', 0))
             
-            if os.path.exists(MARKET_LOG_FILE):
-                df = pd.read_csv(MARKET_LOG_FILE)
-                if today_str in df['Date'].values:
-                    df.loc[df['Date'] == today_str, :] = list(new_row.values())
-                else:
-                    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-            else:
-                df = pd.DataFrame([new_row])
-                
-            df.to_csv(MARKET_LOG_FILE, index=False)
+            nifty_fo = str(nifty_fut.get('data', {}).get('ltp', 0.0)) if nifty_fut else "0.0"
+            nifty_ff = str(nifty_fut.get('data', {}).get('netChange', 0)) if nifty_fut else "0"
+
+            sensex_o = str(sensex_spot.get('data', {}).get('ltp', 0.0))
+            sensex_f = str(sensex_spot.get('data', {}).get('netChange', 0))
+            
+            sensex_fo = str(sensex_fut.get('data', {}).get('ltp', 0.0)) if sensex_fut else "0.0"
+            sensex_ff = str(sensex_fut.get('data', {}).get('netChange', 0)) if sensex_fut else "0"
+
             return nifty_o, nifty_f, nifty_fo, nifty_ff, sensex_o, sensex_f, sensex_fo, sensex_ff
+            
     except Exception as e:
-        print(f"Angel API Login Error: {e}")
+        print(f"Live API Error: {e}")
 
     return "0.0", "0", "0.0", "0", "0.0", "0", "0.0", "0"
 
