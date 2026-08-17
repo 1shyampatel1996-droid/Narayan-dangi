@@ -1,5 +1,8 @@
 import subprocess
 import sys
+import pandas as pd
+import os
+from datetime import datetime, time
 
 # यह ऑटोमैटिकली चेक करेगा और पैकेज इंस्टॉल कर देगा
 try:
