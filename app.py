@@ -21,7 +21,7 @@ st.sidebar.title("Controls")
 if st.sidebar.button("🔄 Refresh Market Data"):
     st.rerun()
 
-# --- ऑटो-सर्च फंक्शन (सिर्फ फ्यूचर के लिए, क्योंकि इनकी एक्सपायरी बदलती है) ---
+# --- ऑटो-सर्च फंक्शन (फ्यूचर टोकन के लिए) ---
 @st.cache_data(ttl=1800)
 def get_current_future_token(symbol_name, exchange_segment):
     try:
@@ -39,7 +39,7 @@ def get_current_future_token(symbol_name, exchange_segment):
         pass
     return None
 
-# --- Angel One डेटा फेचिंग फंक्शन ---
+# --- अलग और सुरक्षित डेटा फेचिंग फंक्शन ---
 def get_angel_one_data(symbol_token, exchange="NSE"):
     open_price = 0.0
     if not symbol_token:
@@ -63,7 +63,7 @@ def get_angel_one_data(symbol_token, exchange="NSE"):
             }
             
             candles = obj.getCandleData(historic_param)
-            if candles and 'data' in candles and len(candles['data']) > 0:
+            if candles and isinstance(candles, dict) and 'data' in candles and candles['data']:
                 latest_candle = candles['data'][-1]
                 open_price = float(latest_candle[1])
     except Exception:
@@ -85,13 +85,14 @@ def get_angel_one_data(symbol_token, exchange="NSE"):
     third_digit = final_digit % 10
     return open_price, final_digit, third_digit
 
-# टोकन कॉन्फ़िगरेशन (स्पॉट फिक्स हैं, फ्यूचर ऑटो-सर्च होंगे)
-nifty_spot_token = "99926000"  # Nifty 50 Index Spot Token (Fixed)
-sensex_spot_token = "999019"   # Sensex Index Spot Token (Fixed)
+# फिक्स और डायनेमिक टोकन
+nifty_spot_token = "99926000"
+sensex_spot_token = "999019"
 
 nifty_fut_token = get_current_future_token("NIFTY", "NFO")
 sensex_fut_token = get_current_future_token("SENSEX", "BFO")
 
+# हर एक डेटा को अलग-अलग कॉल करना ताकि एक का असर दूसरे पर न पड़े
 nifty_open, nifty_dig, nifty_third = get_angel_one_data(nifty_spot_token, exchange="NSE")
 nifty_fut_open, nifty_fut_dig, nifty_fut_third = get_angel_one_data(nifty_fut_token, exchange="NFO")
 
