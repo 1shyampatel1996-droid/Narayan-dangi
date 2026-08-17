@@ -2,32 +2,54 @@ import streamlit as st
 import yfinance as yf
 import requests
 import pandas as pd
-import pyotp
 from SmartApi import SmartConnect
+import pyotp
 from datetime import datetime, timedelta
 
 # पेज सेटअप
-st.set_page_config(page_title="Market Live Dashboard", layout="wide")
+st.set_page_config(page_title="Market Live App", layout="wide")
 st.title("Market Live Data Dashboard")
 
-# --- Angel One क्रेडेंशियल्स और ऑटोमैटिक TOTP सेटअप ---
+# --- Angel One क्रेडेंशियल्स ---
 API_KEY = "GAuh625s"
 CLIENT_ID = "N417637"
 PIN = "1003"
 TOTP_SECRET = "2YRKKEYE2HZD562KPXZTK7PXJY"
 
+# साइडबार में रिफ्रेश बटन
+st.sidebar.title("Controls")
+if st.sidebar.button("🔄 Refresh Market Data"):
+    st.rerun()
+
+# --- ऑटो-सर्च फंक्शन: करंट फ्यूचर टोकन ढूंढने के लिए ---
+@st.cache_data(ttl=1800)
+def get_current_future_token(symbol_name, exchange_segment):
+    try:
+        url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            df = pd.DataFrame(response.json())
+            filtered = df[(df['symbol'].str.startswith(symbol_name)) & (df['exch_seg'] == exchange_segment) & (df['symbol'].str.endswith("FUT"))]
+            if not filtered.empty:
+                return str(filtered.iloc[0]['token'])
+    except Exception:
+        pass
+    return None
+
+# --- Angel One डेटा फेचिंग फंक्शन ---
 def get_angel_one_data(symbol_token, exchange="NSE"):
     open_price = 0.0
+    if not symbol_token:
+        return 0.0, 0, 0
+        
     try:
         obj = SmartConnect(api_key=API_KEY)
-        # pyotp के जरिए हर 30 सेकंड में ऑटोमैटिक कोड जनरेट होगा
-        generated_totp = pyotp.TOTP(TOTP_SECRET).now()
-        
-        data = obj.generateSession(CLIENT_ID, PIN, generated_totp)
+        totp = pyotp.TOTP(TOTP_SECRET).now()
+        data = obj.generateSession(CLIENT_ID, PIN, totp)
         
         if data and data.get('status'):
             to_date = datetime.now().strftime("%Y-%m-%d %H:%M")
-            from_date = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d %H:%M")
+            from_date = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d %H:%M")
             
             historic_param = {
                 "exchange": exchange,
@@ -44,6 +66,7 @@ def get_angel_one_data(symbol_token, exchange="NSE"):
     except Exception:
         pass
 
+    # डिजिट कैलकुलेशन लॉजिक
     price_str = f"{open_price:.2f}".replace(".", "").replace(",", "")
     digit_sum = sum(int(char) for char in price_str if char.isdigit())
     
@@ -59,14 +82,20 @@ def get_angel_one_data(symbol_token, exchange="NSE"):
     third_digit = final_digit % 10
     return open_price, final_digit, third_digit
 
-# भारतीय मार्केट डेटा फेच करना (इंडिपेंडेंट डेटा फीड)
-nifty_open, nifty_dig, nifty_third = get_angel_one_data("99926000", exchange="NSE")
-nifty_fut_open, nifty_fut_dig, nifty_fut_third = get_angel_one_data("YOUR_NIFTY_FUTURE_TOKEN", exchange="NFO")
+# टोकन प्राप्त करना
+nifty_spot_token = "99926000"
+sensex_spot_token = "999019"
 
-sensex_open, sensex_dig, sensex_third = get_angel_one_data("999019", exchange="BSE")
-sensex_fut_open, sensex_fut_dig, sensex_fut_third = get_angel_one_data("YOUR_SENSEX_FUTURE_TOKEN", exchange="BFO")
+nifty_fut_token = get_current_future_token("NIFTY", "NFO")
+sensex_fut_token = get_current_future_token("SENSEX", "BFO")
 
-# कलर कंपेरिजन लॉजिक
+nifty_open, nifty_dig, nifty_third = get_angel_one_data(nifty_spot_token, exchange="NSE")
+nifty_fut_open, nifty_fut_dig, nifty_fut_third = get_angel_one_data(nifty_fut_token, exchange="NFO")
+
+sensex_open, sensex_dig, sensex_third = get_angel_one_data(sensex_spot_token, exchange="BSE")
+sensex_fut_open, sensex_fut_dig, sensex_fut_third = get_angel_one_data(sensex_fut_token, exchange="BFO")
+
+# कलर कंपेरिजन
 n_col1 = "green" if nifty_third >= nifty_fut_third else "red"
 n_col2 = "green" if nifty_fut_third >= nifty_third else "red"
 
@@ -111,7 +140,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- Crypto डेटा (Coinbase & CME yfinance) ---
+# --- 3 & 4. Crypto (Bitcoin & Ethereum) - आपका ओरिजिनल कोड पूरी तरह सुरक्षित ---
 def get_coinbase_daily_open(product_id):
     try:
         url = f"https://api.exchange.coinbase.com/products/{product_id}/candles?granularity=86400"
