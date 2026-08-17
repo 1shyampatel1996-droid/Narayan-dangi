@@ -40,12 +40,11 @@ from datetime import date
 # --- नया ऑटो-लॉगिंग सिस्टम ---
 MARKET_LOG_FILE = "monthly_market_log.csv"
 def get_stable_angel_data(today_str):
- 
-    # 1. अगर फाइल मौजूद है, तो चेक करें कि आज का डेटा है या नहीं
     if os.path.exists(MARKET_LOG_FILE):
         df = pd.read_csv(MARKET_LOG_FILE)
         if today_str in df['Date'].values:
             row = df[df['Date'] == today_str].iloc[0]
+            # यहाँ 8 वैल्यू होनी चाहिए
             return str(row['Nifty_Idx_Open']), str(row['Nifty_Idx_Fin']), \
                    str(row['Nifty_Fut_Open']), str(row['Nifty_Fut_Fin']), \
                    str(row['Sensex_Idx_Open']), str(row['Sensex_Idx_Fin']), \
