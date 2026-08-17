@@ -21,6 +21,19 @@ st.sidebar.title("Controls")
 if st.sidebar.button("🔄 Refresh Market Data"):
     st.rerun()
 
+# --- सिंगल सेशन कनेक्शन (रेट-लिमिट से बचने के लिए) ---
+@st.cache_resource(ttl=600)
+def get_angel_session():
+    try:
+        obj = SmartConnect(api_key=API_KEY)
+        totp = pyotp.TOTP(TOTP_SECRET).now()
+        data = obj.generateSession(CLIENT_ID, PIN, totp)
+        if data and data.get('status'):
+            return obj
+    except Exception:
+        pass
+    return None
+
 # --- ऑटो-सर्च फंक्शन (फ्यूचर टोकन के लिए) ---
 @st.cache_data(ttl=1800)
 def get_current_future_token(symbol_name, exchange_segment):
@@ -39,33 +52,28 @@ def get_current_future_token(symbol_name, exchange_segment):
         pass
     return None
 
-# --- अलग और सुरक्षित डेटा फेचिंग फंक्शन ---
-def get_angel_one_data(symbol_token, exchange="NSE"):
+# --- डेटा फेचिंग फंक्शन (सिंगल सेशन का उपयोग) ---
+def get_angel_one_data(obj, symbol_token, exchange="NSE"):
     open_price = 0.0
-    if not symbol_token:
+    if not obj or not symbol_token:
         return 0.0, 0, 0
         
     try:
-        obj = SmartConnect(api_key=API_KEY)
-        totp = pyotp.TOTP(TOTP_SECRET).now()
-        data = obj.generateSession(CLIENT_ID, PIN, totp)
+        to_date = datetime.now().strftime("%Y-%m-%d %H:%M")
+        from_date = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d %H:%M")
         
-        if data and data.get('status'):
-            to_date = datetime.now().strftime("%Y-%m-%d %H:%M")
-            from_date = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d %H:%M")
-            
-            historic_param = {
-                "exchange": exchange,
-                "symboltoken": symbol_token,
-                "interval": "ONE_DAY",
-                "fromdate": from_date,
-                "todate": to_date
-            }
-            
-            candles = obj.getCandleData(historic_param)
-            if candles and isinstance(candles, dict) and 'data' in candles and candles['data']:
-                latest_candle = candles['data'][-1]
-                open_price = float(latest_candle[1])
+        historic_param = {
+            "exchange": exchange,
+            "symboltoken": symbol_token,
+            "interval": "ONE_DAY",
+            "fromdate": from_date,
+            "todate": to_date
+        }
+        
+        candles = obj.getCandleData(historic_param)
+        if candles and isinstance(candles, dict) and 'data' in candles and candles['data']:
+            latest_candle = candles['data'][-1]
+            open_price = float(latest_candle[1])
     except Exception:
         pass
 
@@ -85,19 +93,21 @@ def get_angel_one_data(symbol_token, exchange="NSE"):
     third_digit = final_digit % 10
     return open_price, final_digit, third_digit
 
-# फिक्स और डायनेमिक टोकन
+# सेशन और टोकन इनिशियलाइज़ेशन
+angel_obj = get_angel_session()
+
 nifty_spot_token = "99926000"
 sensex_spot_token = "999019"
 
 nifty_fut_token = get_current_future_token("NIFTY", "NFO")
 sensex_fut_token = get_current_future_token("SENSEX", "BFO")
 
-# हर एक डेटा को अलग-अलग कॉल करना ताकि एक का असर दूसरे पर न पड़े
-nifty_open, nifty_dig, nifty_third = get_angel_one_data(nifty_spot_token, exchange="NSE")
-nifty_fut_open, nifty_fut_dig, nifty_fut_third = get_angel_one_data(nifty_fut_token, exchange="NFO")
+# अब एक ही सेशन से सारा डेटा सुरक्षित तरीके से आएगा
+nifty_open, nifty_dig, nifty_third = get_angel_one_data(angel_obj, nifty_spot_token, exchange="NSE")
+nifty_fut_open, nifty_fut_dig, nifty_fut_third = get_angel_one_data(angel_obj, nifty_fut_token, exchange="NFO")
 
-sensex_open, sensex_dig, sensex_third = get_angel_one_data(sensex_spot_token, exchange="BSE")
-sensex_fut_open, sensex_fut_dig, sensex_fut_third = get_angel_one_data(sensex_fut_token, exchange="BFO")
+sensex_open, sensex_dig, sensex_third = get_angel_one_data(angel_obj, sensex_spot_token, exchange="BSE")
+sensex_fut_open, sensex_fut_dig, sensex_fut_third = get_angel_one_data(angel_obj, sensex_fut_token, exchange="BFO")
 
 # कलर कंपेरिजन
 n_col1 = "green" if nifty_third >= nifty_fut_third else "red"
@@ -144,7 +154,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- 3 & 4. Crypto (Bitcoin & Ethereum) - आपका ओरिजिनल कोड पूरी तरह सुरक्षित ---
+# --- 3 & 4. Crypto (Bitcoin & Ethereum) - सुरक्षित ---
 def get_coinbase_daily_open(product_id):
     try:
         url = f"https://api.exchange.coinbase.com/products/{product_id}/candles?granularity=86400"
