@@ -7,41 +7,40 @@ import pandas as pd
 st.set_page_config(page_title="Market Live App", layout="wide")
 st.title("Market Live Data Dashboard")
 
-# --- फंक्शन: केवल रियल ओपन प्राइस फेच करने के लिए (बिना किसी फेरबदल के) ---
-def get_real_market_data(ticker_symbol):
+# --- फंक्शन: स्वतंत्र रूप से केवल संबंधित टिकर का डेटा फेच करने के लिए (कोई मिलावट नहीं) ---
+def get_exact_market_data(ticker_symbol):
+    open_price = 0.0
     try:
         df = yf.Ticker(ticker_symbol).history(period="2d", interval="1d")
-        if df.empty or 'Open' not in df.columns:
-            return 0.0, 0, 0
-        
-        open_price = float(df['Open'].iloc[-1])
-        if pd.isna(open_price) or open_price <= 0:
-            open_price = float(df['Open'].iloc[-2])
-            
-        # डिजिट कैलकुलेशन लॉजिक
-        price_str = f"{open_price:.2f}".replace(".", "").replace(",", "")
-        digit_sum = sum(int(char) for char in price_str if char.isdigit())
-        
-        temp_sum = digit_sum
-        while temp_sum >= 10:
-            temp_sum = sum(int(c) for c in str(temp_sum))
-        
-        if digit_sum < 10:
-            final_digit = digit_sum * 100 + digit_sum * 10 + temp_sum
-        else:
-            final_digit = (digit_sum * 10) + temp_sum
-            
-        third_digit = final_digit % 10
-        return open_price, final_digit, third_digit
+        if not df.empty and 'Open' in df.columns:
+            open_price = float(df['Open'].iloc[-1])
+            if pd.isna(open_price) or open_price <= 0:
+                open_price = float(df['Open'].iloc[-2])
     except Exception:
-        return 0.0, 0, 0
+        pass
 
-# वास्तविक डेटा फेच करना (रियल टिकर्स के साथ)
-nifty_open, nifty_dig, nifty_third = get_real_market_data("^NSEI")
-nifty_fut_open, nifty_fut_dig, nifty_fut_third = get_real_market_data("NIFTY=F")
+    # डिजिट कैलकुलेशन लॉजिक
+    price_str = f"{open_price:.2f}".replace(".", "").replace(",", "")
+    digit_sum = sum(int(char) for char in price_str if char.isdigit())
+    
+    temp_sum = digit_sum
+    while temp_sum >= 10:
+        temp_sum = sum(int(c) for c in str(temp_sum))
+    
+    if digit_sum < 10:
+        final_digit = digit_sum * 100 + digit_sum * 10 + temp_sum
+    else:
+        final_digit = (digit_sum * 10) + temp_sum
+        
+    third_digit = final_digit % 10
+    return open_price, final_digit, third_digit
 
-sensex_open, sensex_dig, sensex_third = get_real_market_data("^BSESN")
-sensex_fut_open, sensex_fut_dig, sensex_fut_third = get_real_market_data("BSESN=F") # यदि टिकर उपलब्ध हो
+# पूरी तरह स्वतंत्र डेटा फेचिंग (आपस में कोई डेटा शेयर नहीं होगा)
+nifty_open, nifty_dig, nifty_third = get_exact_market_data("^NSEI")
+nifty_fut_open, nifty_fut_dig, nifty_fut_third = get_exact_market_data("NIFTY=F")
+
+sensex_open, sensex_dig, sensex_third = get_exact_market_data("^BSESN")
+sensex_fut_open, sensex_fut_dig, sensex_fut_third = get_exact_market_data("BSESN=F")
 
 # कलर कंपेरिजन
 n_col1 = "green" if nifty_third >= nifty_fut_third else "red"
