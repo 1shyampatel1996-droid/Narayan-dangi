@@ -2,7 +2,7 @@ import subprocess
 import sys
 import pandas as pd
 import os
-from datetime import datetime, time
+from datetime import datetime, time, date
 
 # यह ऑटोमैटिकली चेक करेगा और पैकेज इंस्टॉल कर देगा
 try:
@@ -34,8 +34,6 @@ def get_color(val1, val2):
   except:
     return ("black", "black")
 
-
-from datetime import date
 
 MARKET_LOG_FILE = "monthly_market_log.csv"
 
@@ -75,18 +73,6 @@ def get_stable_angel_data(today_str):
         print(f"API Error: {e}")
 
     return nifty_o, nifty_f, nifty_fo, nifty_ff, sensex_o, sensex_f, sensex_fo, sensex_ff
-
-current_date = str(date.today())
-
-(
-    nifty_idx_open, nifty_idx_fin,
-    nifty_fut_open, nifty_fut_fin,
-    sensex_idx_open, sensex_idx_fin,
-    sensex_fut_open, sensex_fut_fin
-) = get_stable_angel_data(current_date)
-
-nifty_o, nifty_f, nifty_fo, nifty_ff, sensex_o, sensex_f, sensex_fo, sensex_ff
-
 
 current_date = str(date.today())
 
@@ -139,16 +125,11 @@ st.markdown(
 )
 
 import requests
-
-
-import requests
-import pandas as pd
 import yfinance as yf
 
 # --- 1. Coinbase Exchange API से सटीक Daily Open Price लाने के लिए ---
 def get_coinbase_daily_open(product_id):
     try:
-        # Coinbase Pro/Exchange candles API (granularity=86400 मतलब 1 दिन की कैंडल)
         url = f"https://api.exchange.coinbase.com/products/{product_id}/candles?granularity=86400"
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers, timeout=5)
@@ -156,14 +137,10 @@ def get_coinbase_daily_open(product_id):
         if response.status_code == 200:
             candles = response.json()
             if candles and len(candles) > 0:
-                # candles फॉर्मेट: [time, low, high, open, close, volume]
-                # सबसे आखिरी या आज की कैंडल का 'open' इंडेक्स 3 पर होता है
-                # अगर आज की कैंडल लाइव है, तो उसका ओपन फिक्स होता है। सुरक्षित तरीके से आज या कल की कैंडल देखते हैं।
-                open_price = float(candles[0][3]) # candles[0] सबसे ताजा या चालू दिन की कैंडल होती है
+                open_price = float(candles[0][3])
                 if open_price <= 0 and len(candles) > 1:
                     open_price = float(candles[1][3])
                 
-                # डिजिट-सम कैलकुलेशन
                 price_str = f"{open_price:.2f}".replace(".", "").replace(",", "")
                 digit_sum = sum(int(char) for char in price_str if char.isdigit())
                 
@@ -210,12 +187,12 @@ def get_cme_future_data(ticker_symbol):
     except Exception:
         return 0.0, 0, 0
 
-# डेटा फेच करना (Coinbase Daily Open & CME Futures)
-btc_cb_open, btc_cb_dig, btc_cb_third = get_coinbase_daily_open("BTC-USD")  # Coinbase Daily Open Spot
-btc_cme_open, btc_cme_dig, btc_cme_third = get_cme_future_data("BTC=F")     # CME Future
+# डेटा फेच करना
+btc_cb_open, btc_cb_dig, btc_cb_third = get_coinbase_daily_open("BTC-USD")
+btc_cme_open, btc_cme_dig, btc_cme_third = get_cme_future_data("BTC=F")
 
-eth_cb_open, eth_cb_dig, eth_cb_third = get_coinbase_daily_open("ETH-USD")  # Coinbase Daily Open Spot
-eth_cme_open, eth_cme_dig, eth_cme_third = get_cme_future_data("ETH=F")     # CME Future
+eth_cb_open, eth_cb_dig, eth_cb_third = get_coinbase_daily_open("ETH-USD")
+eth_cme_open, eth_cme_dig, eth_cme_third = get_cme_future_data("ETH=F")
 
 # कलर कंपेरिजन
 btc_cb_col = "green" if btc_cb_third >= btc_cme_third else "red"
