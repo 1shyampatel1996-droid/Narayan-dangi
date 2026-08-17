@@ -21,7 +21,7 @@ st.sidebar.title("Controls")
 if st.sidebar.button("🔄 Refresh Market Data"):
     st.rerun()
 
-# --- ऑटो-सर्च फंक्शन: करंट फ्यूचर टोकन ढूंढने के लिए ---
+# --- सटीक ऑटो-सर्च फंक्शन (करंट मंथ की एक्सपायरी वाला फ्यूचर ढूंढने के लिए) ---
 @st.cache_data(ttl=1800)
 def get_current_future_token(symbol_name, exchange_segment):
     try:
@@ -29,8 +29,13 @@ def get_current_future_token(symbol_name, exchange_segment):
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             df = pd.DataFrame(response.json())
-            filtered = df[(df['symbol'].str.startswith(symbol_name)) & (df['exch_seg'] == exchange_segment) & (df['symbol'].str.endswith("FUT"))]
+            # सटीक सिंबल और FUT फ़िल्टर करना
+            filtered = df[(df['name'] == symbol_name) & (df['exch_seg'] == exchange_segment) & (df['symbol'].str.endswith("FUT"))]
             if not filtered.empty:
+                # यदि एक्सपायरी कॉलम है तो उसे डेट में बदलकर सबसे नजदीक वाला कॉन्ट्रैक्ट चुनें
+                if 'expiry' in filtered.columns:
+                    filtered['expiry_date'] = pd.to_datetime(filtered['expiry'], format='%d%b%Y', errors='coerce')
+                    filtered = filtered.sort_values(by='expiry_date')
                 return str(filtered.iloc[0]['token'])
     except Exception:
         pass
@@ -49,7 +54,8 @@ def get_angel_one_data(symbol_token, exchange="NSE"):
         
         if data and data.get('status'):
             to_date = datetime.now().strftime("%Y-%m-%d %H:%M")
-            from_date = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d %H:%M")
+            # रेंज को 5 दिन सुरक्षित किया ताकि छुट्टी या पिछले दिन का ओपन भी मिल सके
+            from_date = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d %H:%M")
             
             historic_param = {
                 "exchange": exchange,
@@ -82,7 +88,7 @@ def get_angel_one_data(symbol_token, exchange="NSE"):
     third_digit = final_digit % 10
     return open_price, final_digit, third_digit
 
-# टोकन प्राप्त करना
+# टोकन प्राप्त करना (स्पॉट फिक्स हैं, फ्यूचर ऑटो-सर्च होंगे)
 nifty_spot_token = "99926000"
 sensex_spot_token = "999019"
 
