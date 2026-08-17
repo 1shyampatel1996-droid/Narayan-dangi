@@ -2,30 +2,28 @@ import streamlit as st
 import yfinance as yf
 import requests
 import pandas as pd
-from SmartApi import SmartConnect
 import pyotp
+from SmartApi import SmartConnect
 from datetime import datetime, timedelta
 
 # पेज सेटअप
-st.set_page_config(page_title="Market Live App", layout="wide")
+st.set_page_config(page_title="Market Live Dashboard", layout="wide")
 st.title("Market Live Data Dashboard")
 
-# --- Angel One API क्रेडेंशियल्स ---
+# --- Angel One क्रेडेंशियल्स और ऑटोमैटिक TOTP सेटअप ---
 API_KEY = "GAuh625s"
 CLIENT_ID = "N417637"
 PIN = "1003"
-# TOTP Secret Key को Streamlit Secrets से सुरक्षित रूप से लें
-TOTP_KEY = st.secrets.get("ANGEL_TOTP_KEY", "")
+TOTP_SECRET = "2YRKKEYE2HZD562KPXZTK7PXJY"
 
 def get_angel_one_data(symbol_token, exchange="NSE"):
     open_price = 0.0
     try:
-        if not TOTP_KEY:
-            return 0.0, 0, 0
-
         obj = SmartConnect(api_key=API_KEY)
-        totp = pyotp.TOTP(TOTP_KEY).now()
-        data = obj.generateSession(CLIENT_ID, PIN, totp)
+        # pyotp के जरिए हर 30 सेकंड में ऑटोमैटिक कोड जनरेट होगा
+        generated_totp = pyotp.TOTP(TOTP_SECRET).now()
+        
+        data = obj.generateSession(CLIENT_ID, PIN, generated_totp)
         
         if data and data.get('status'):
             to_date = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -61,14 +59,14 @@ def get_angel_one_data(symbol_token, exchange="NSE"):
     third_digit = final_digit % 10
     return open_price, final_digit, third_digit
 
-# भारतीय मार्केट डेटा (Angel One)
+# भारतीय मार्केट डेटा फेच करना (इंडिपेंडेंट डेटा फीड)
 nifty_open, nifty_dig, nifty_third = get_angel_one_data("99926000", exchange="NSE")
 nifty_fut_open, nifty_fut_dig, nifty_fut_third = get_angel_one_data("YOUR_NIFTY_FUTURE_TOKEN", exchange="NFO")
 
 sensex_open, sensex_dig, sensex_third = get_angel_one_data("999019", exchange="BSE")
 sensex_fut_open, sensex_fut_dig, sensex_fut_third = get_angel_one_data("YOUR_SENSEX_FUTURE_TOKEN", exchange="BFO")
 
-# कलर कंपेरिजन
+# कलर कंपेरिजन लॉजिक
 n_col1 = "green" if nifty_third >= nifty_fut_third else "red"
 n_col2 = "green" if nifty_fut_third >= nifty_third else "red"
 
@@ -113,7 +111,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- 3 & 4. Crypto (Bitcoin & Ethereum) - सुरक्षित और यथावत ---
+# --- Crypto डेटा (Coinbase & CME yfinance) ---
 def get_coinbase_daily_open(product_id):
     try:
         url = f"https://api.exchange.coinbase.com/products/{product_id}/candles?granularity=86400"
