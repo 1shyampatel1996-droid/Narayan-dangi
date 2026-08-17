@@ -37,8 +37,8 @@ def get_color(val1, val2):
 
 from datetime import date
 
-# 24 घंटे के लिए कैश किया गया फंक्शन ताकि डेटा एक बार आने के बाद पूरे दिन फिक्स रहे
-# फाइल का नाम जहाँ डेली डेटा स्टोर होगा
+from datetime import date
+# --- नया ऑटो-लॉगिंग सिस्टम ---
 MARKET_LOG_FILE = "monthly_market_log.csv"
 
 def get_stable_angel_data(today_str):
@@ -46,19 +46,19 @@ def get_stable_angel_data(today_str):
     if os.path.exists(MARKET_LOG_FILE):
         df = pd.read_csv(MARKET_LOG_FILE)
         if today_str in df['Date'].values:
-            # अगर आज का डेटा मिल गया, तो वही लौटाएं
             row = df[df['Date'] == today_str].iloc[0]
-            return str(row['Nifty_Idx_Open']), str(row['Nifty_Idx_Fin']), str(row['Nifty_Fut_Open']), str(row['Nifty_Fut_Fin']), \
-                   str(row['Sensex_Idx_Open']), str(row['Sensex_Idx_Fin']), str(row['Sensex_Fut_Open']), str(row['Sensex_Fut_Fin'])
+            return str(row['Nifty_Idx_Open']), str(row['Nifty_Idx_Fin']), \
+                   str(row['Nifty_Fut_Open']), str(row['Nifty_Fut_Fin']), \
+                   str(row['Sensex_Idx_Open']), str(row['Sensex_Idx_Fin']), \
+                   str(row['Sensex_Fut_Open']), str(row['Sensex_Fut_Fin'])
 
     # 2. अगर आज का डेटा नहीं है और टाइम 9:08 AM के बाद है, तो नया डेटा लाएं
     if datetime.now().time() >= time(9, 8):
         try:
-            # --- असली एंजेल वन API से डेटा फेच करने का कोड यहाँ रहेगा ---
+            # यहाँ आपका API कॉल कोड आता है
             nifty_o, nifty_f, nifty_fo, nifty_ff = "24361.9", "257", "24452.0", "178"
             sensex_o, sensex_f, sensex_fo, sensex_ff = "77903.43", "336", "78278.0", "325"
             
-            # डेटा को CSV फाइल में सेव करें
             new_row = {"Date": today_str, "Nifty_Idx_Open": nifty_o, "Nifty_Idx_Fin": nifty_f, 
                        "Nifty_Fut_Open": nifty_fo, "Nifty_Fut_Fin": nifty_ff,
                        "Sensex_Idx_Open": sensex_o, "Sensex_Idx_Fin": sensex_f, 
@@ -76,7 +76,6 @@ def get_stable_angel_data(today_str):
         except:
             pass
 
-    # 3. अगर अभी 9:08 नहीं बजे हैं
     return "0.0", "0", "0.0", "0", "0.0", "0", "0.0", "0"
 
 # आज की तारीख लें ताकि तारीख बदलने पर ही नया डेटा लोड हो
@@ -89,6 +88,8 @@ current_date = str(date.today())
     sensex_idx_open, sensex_idx_fin,
     sensex_fut_open, sensex_fut_fin
 ) = get_stable_angel_data(current_date)
+# --- नया ऑटो-लॉगिंग सिस्टम समाप्त ---
+
 
 n_col1, n_col2 = get_color(nifty_idx_open, nifty_idx_fin)
 s_col1, s_col2 = get_color(sensex_idx_open, sensex_idx_fin)
