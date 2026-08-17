@@ -21,29 +21,20 @@ st.sidebar.title("Controls")
 if st.sidebar.button("🔄 Refresh Market Data"):
     st.rerun()
 
-# --- ऑटो-सर्च फंक्शन: स्पॉट और फ्यूचर दोनों के टोकन ढूंढने के लिए ---
+# --- ऑटो-सर्च फंक्शन (सिर्फ फ्यूचर के लिए, क्योंकि इनकी एक्सपायरी बदलती है) ---
 @st.cache_data(ttl=1800)
-def get_market_token(symbol_name, segment_type, is_future=False):
+def get_current_future_token(symbol_name, exchange_segment):
     try:
         url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             df = pd.DataFrame(response.json())
-            
-            if is_future:
-                filtered = df[(df['name'] == symbol_name) & (df['exch_seg'] == segment_type) & (df['symbol'].str.endswith("FUT"))]
-                if not filtered.empty:
-                    if 'expiry' in filtered.columns:
-                        filtered['expiry_date'] = pd.to_datetime(filtered['expiry'], format='%d%b%Y', errors='coerce')
-                        filtered = filtered.sort_values(by='expiry_date')
-                    return str(filtered.iloc[0]['token'])
-            else:
-                # स्पॉट इंडेक्स के लिए
-                filtered = df[(df['name'] == symbol_name) & (df['exch_seg'] == segment_type) & (df['symbol'].str.contains("INDEX") | (df['symbol'] == symbol_name))]
-                if filtered.empty:
-                    filtered = df[(df['name'] == symbol_name) & (df['exch_seg'] == segment_type)]
-                if not filtered.empty:
-                    return str(filtered.iloc[0]['token'])
+            filtered = df[(df['name'] == symbol_name) & (df['exch_seg'] == exchange_segment) & (df['symbol'].str.endswith("FUT"))]
+            if not filtered.empty:
+                if 'expiry' in filtered.columns:
+                    filtered['expiry_date'] = pd.to_datetime(filtered['expiry'], format='%d%b%Y', errors='coerce')
+                    filtered = filtered.sort_values(by='expiry_date')
+                return str(filtered.iloc[0]['token'])
     except Exception:
         pass
     return None
@@ -94,12 +85,12 @@ def get_angel_one_data(symbol_token, exchange="NSE"):
     third_digit = final_digit % 10
     return open_price, final_digit, third_digit
 
-# डाइनेमिक टोकन प्राप्त करना (स्पॉट और फ्यूचर दोनों ऑटो-सर्च होंगे)
-nifty_spot_token = get_market_token("NIFTY", "NSE", is_future=False)
-nifty_fut_token = get_market_token("NIFTY", "NFO", is_future=True)
+# टोकन कॉन्फ़िगरेशन (स्पॉट फिक्स हैं, फ्यूचर ऑटो-सर्च होंगे)
+nifty_spot_token = "99926000"  # Nifty 50 Index Spot Token (Fixed)
+sensex_spot_token = "999019"   # Sensex Index Spot Token (Fixed)
 
-sensex_spot_token = get_market_token("SENSEX", "BSE", is_future=False)
-sensex_fut_token = get_market_token("SENSEX", "BFO", is_future=True)
+nifty_fut_token = get_current_future_token("NIFTY", "NFO")
+sensex_fut_token = get_current_future_token("SENSEX", "BFO")
 
 nifty_open, nifty_dig, nifty_third = get_angel_one_data(nifty_spot_token, exchange="NSE")
 nifty_fut_open, nifty_fut_dig, nifty_fut_third = get_angel_one_data(nifty_fut_token, exchange="NFO")
