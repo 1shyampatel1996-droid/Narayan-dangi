@@ -37,24 +37,21 @@ def get_color(val1, val2):
 
 from datetime import date
 
-# --- नया ऑटो-लॉगिंग सिस्टम ---
+
 MARKET_LOG_FILE = "monthly_market_log.csv"
+
 def get_stable_angel_data(today_str):
     if os.path.exists(MARKET_LOG_FILE):
         df = pd.read_csv(MARKET_LOG_FILE)
         if today_str in df['Date'].values:
             row = df[df['Date'] == today_str].iloc[0]
-            # यहाँ 8 वैल्यू होनी चाहिए
-                        return str(row['Nifty_Idx_Open']), str(row['Nifty_Idx_Fin']), \
+            return str(row['Nifty_Idx_Open']), str(row['Nifty_Idx_Fin']), \
                    str(row['Nifty_Fut_Open']), str(row['Nifty_Fut_Fin']), \
                    str(row['Sensex_Idx_Open']), str(row['Sensex_Idx_Fin']), \
                    str(row['Sensex_Fut_Open']), str(row['Sensex_Fut_Fin'])
 
-
-    # 2. अगर आज का डेटा नहीं है और टाइम 9:08 AM के बाद है, तो नया डेटा लाएं
     if datetime.now().time() >= time(9, 8):
         try:
-            # यहाँ आपका API कॉल कोड आता है
             nifty_o, nifty_f, nifty_fo, nifty_ff = "24361.9", "257", "24452.0", "178"
             sensex_o, sensex_f, sensex_fo, sensex_ff = "77903.43", "336", "78278.0", "325"
             
@@ -77,17 +74,14 @@ def get_stable_angel_data(today_str):
 
     return "0.0", "0", "0.0", "0", "0.0", "0", "0.0", "0"
 
-# आज की तारीख लें ताकि तारीख बदलने पर ही नया डेटा लोड हो
 current_date = str(date.today())
 
-# सुपर-फास्ट और स्टेबल डेटा प्राप्त करें
 (
     nifty_idx_open, nifty_idx_fin,
     nifty_fut_open, nifty_fut_fin,
     sensex_idx_open, sensex_idx_fin,
     sensex_fut_open, sensex_fut_fin
 ) = get_stable_angel_data(current_date)
-# --- नया ऑटो-लॉगिंग सिस्टम समाप्त ---
 
 
 n_col1, n_col2 = get_color(nifty_idx_open, nifty_idx_fin)
