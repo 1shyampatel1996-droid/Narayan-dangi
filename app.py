@@ -40,9 +40,8 @@ from datetime import date
 MARKET_LOG_FILE = "monthly_market_log.csv"
 
 def get_stable_angel_data(today_str):
-    # डिफ़ॉल्ट सेफ वैल्यू ताकि 0.0 या ब्लैंक न आए
-    nifty_o, nifty_f, nifty_fo, nifty_ff = "24361.9", "0", "24452.0", "0"
-    sensex_o, sensex_f, sensex_fo, sensex_ff = "77903.43", "0", "78278.0", "0"
+    nifty_o, nifty_f, nifty_fo, nifty_ff = "0.0", "0", "0.0", "0"
+    sensex_o, sensex_f, sensex_fo, sensex_ff = "0.0", "0", "0.0", "0"
     
     try:
         obj = SmartConnect(api_key=API_KEY)
@@ -50,26 +49,43 @@ def get_stable_angel_data(today_str):
         data = obj.generateSession(CLIENT_ID, MPIN, totp)
         
         if data and data.get('status'):
-            # Nifty LTP Data
-            nifty_res = obj.ltpData("NSE", "NIFTY", "99926000")
-            if nifty_res and isinstance(nifty_res, dict) and 'data' in nifty_res:
-                nifty_data = nifty_res['data']
-                if nifty_data and 'ltp' in nifty_data:
-                    nifty_o = str(nifty_data.get('ltp'))
-                    nifty_f = str(nifty_data.get('netChange', '0'))
+            # 1. Nifty Spot LTP
+            try:
+                nifty_res = obj.ltpData("NSE", "NIFTY", "99926000")
+                if nifty_res and isinstance(nifty_res, dict) and 'data' in nifty_res:
+                    nifty_data = nifty_res['data']
+                    if nifty_data:
+                        nifty_o = str(nifty_data.get('ltp', "0.0"))
+                        nifty_f = str(nifty_data.get('netChange', "0"))
+            except Exception:
+                pass
 
-            # Sensex LTP Data
-            sensex_res = obj.ltpData("BSE", "SENSEX", "99919000")
-            if sensex_res and isinstance(sensex_res, dict) and 'data' in sensex_res:
-                sensex_data = sensex_res['data']
-                if sensex_data and 'ltp' in sensex_data:
-                    sensex_o = str(sensex_data.get('ltp'))
-                    sensex_f = str(sensex_data.get('netChange', '0'))
-                    
+            # 2. Sensex Spot LTP
+            try:
+                sensex_res = obj.ltpData("BSE", "SENSEX", "99919000")
+                if sensex_res and isinstance(sensex_res, dict) and 'data' in sensex_res:
+                    sensex_data = sensex_res['data']
+                    if sensex_data:
+                        sensex_o = str(sensex_data.get('ltp', "0.0"))
+                        sensex_f = str(sensex_data.get('netChange', "0"))
+            except Exception:
+                pass
+                
     except Exception as e:
         print(f"API Error: {e}")
 
     return nifty_o, nifty_f, nifty_fo, nifty_ff, sensex_o, sensex_f, sensex_fo, sensex_ff
+
+current_date = str(date.today())
+
+(
+    nifty_idx_open, nifty_idx_fin,
+    nifty_fut_open, nifty_fut_fin,
+    sensex_idx_open, sensex_idx_fin,
+    sensex_fut_open, sensex_fut_fin
+) = get_stable_angel_data(current_date)
+
+nifty_o, nifty_f, nifty_fo, nifty_ff, sensex_o, sensex_f, sensex_fo, sensex_ff
 
 
 current_date = str(date.today())
