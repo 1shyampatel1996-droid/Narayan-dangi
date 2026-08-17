@@ -122,12 +122,22 @@ sensex_fut_token = get_current_future_token("SENSEX", "BFO")
 nifty_fut_open, nifty_fut_dig, nifty_fut_third = get_angel_one_data(angel_obj, nifty_fut_token, "NFO")
 sensex_fut_open, sensex_fut_dig, sensex_fut_third = get_angel_one_data(angel_obj, sensex_fut_token, "BFO")
 
-# कलर कंपेरिजन
-n_col1 = "green" if nifty_third >= nifty_fut_third else "red"
-n_col2 = "green" if nifty_fut_third >= nifty_third else "red"
+# --- सही कलर कंपेरिजन लॉजिक (बड़ा डिजिट = Green, छोटा डिजिट = Red) ---
+# Nifty Color Logic
+if nifty_fut_third >= nifty_third:
+    n_col1 = "green"  # Future
+    n_col2 = "red"    # Spot
+else:
+    n_col1 = "red"    # Future
+    n_col2 = "green"  # Spot
 
-s_col1 = "green" if sensex_third >= sensex_fut_third else "red"
-s_col2 = "green" if sensex_fut_third >= sensex_third else "red"
+# Sensex Color Logic
+if sensex_fut_third >= sensex_third:
+    s_col1 = "green"  # Future
+    s_col2 = "red"    # Spot
+else:
+    s_col1 = "red"    # Future
+    s_col2 = "green"  # Spot
 
 # --- 1. Nifty Group UI ---
 st.markdown("### 1. Nifty Group")
