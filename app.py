@@ -37,11 +37,10 @@ def get_color(val1, val2):
 
 from datetime import date
 
-from datetime import date
 # --- नया ऑटो-लॉगिंग सिस्टम ---
 MARKET_LOG_FILE = "monthly_market_log.csv"
-
 def get_stable_angel_data(today_str):
+ 
     # 1. अगर फाइल मौजूद है, तो चेक करें कि आज का डेटा है या नहीं
     if os.path.exists(MARKET_LOG_FILE):
         df = pd.read_csv(MARKET_LOG_FILE)
