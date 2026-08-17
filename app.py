@@ -34,7 +34,7 @@ def get_angel_session():
         pass
     return None
 
-# --- ऑटो-सर्च फंक्शन (फ्यूचर टोकन के लिए) ---
+# --- फ्यूचर टोकन ऑटो-सर्च ---
 @st.cache_data(ttl=1800)
 def get_current_future_token(symbol_name, exchange_segment):
     try:
@@ -52,62 +52,75 @@ def get_current_future_token(symbol_name, exchange_segment):
         pass
     return None
 
-# --- डेटा फेचिंग फंक्शन (सिंगल सेशन का उपयोग) ---
-def get_angel_one_data(obj, symbol_token, exchange="NSE"):
+# --- Angel One डेटा फेचिंग (फ्यूचर्स के लिए) ---
+def get_angel_one_data(obj, symbol_token, exchange="NFO"):
     open_price = 0.0
     if not obj or not symbol_token:
         return 0.0, 0, 0
-        
     try:
-        to_date = datetime.now().strftime("%Y-%m-%d %H:%M")
-        from_date = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d %H:%M")
-        
         historic_param = {
             "exchange": exchange,
             "symboltoken": symbol_token,
             "interval": "ONE_DAY",
-            "fromdate": from_date,
-            "todate": to_date
+            "fromdate": (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d %H:%M"),
+            "todate": datetime.now().strftime("%Y-%m-%d %H:%M")
         }
-        
         candles = obj.getCandleData(historic_param)
         if candles and isinstance(candles, dict) and 'data' in candles and candles['data']:
-            latest_candle = candles['data'][-1]
-            open_price = float(latest_candle[1])
+            open_price = float(candles['data'][-1][1])
     except Exception:
         pass
-
+    
     # डिजिट कैलकुलेशन लॉजिक
     price_str = f"{open_price:.2f}".replace(".", "").replace(",", "")
     digit_sum = sum(int(char) for char in price_str if char.isdigit())
-    
     temp_sum = digit_sum
     while temp_sum >= 10:
         temp_sum = sum(int(c) for c in str(temp_sum))
-    
     if digit_sum < 10:
         final_digit = digit_sum * 100 + digit_sum * 10 + temp_sum
     else:
         final_digit = (digit_sum * 10) + temp_sum
-        
     third_digit = final_digit % 10
     return open_price, final_digit, third_digit
+
+# --- Yahoo Finance (स्पॉट इंडेक्स के लिए: Nifty 50 और Sensex) ---
+def get_spot_index_yf(ticker):
+    try:
+        df = yf.Ticker(ticker).history(period="2d", interval="1d")
+        if df.empty or 'Open' not in df.columns:
+            return 0.0, 0, 0
+        open_price = float(df['Open'].iloc[-1])
+        if pd.isna(open_price) or open_price <= 0:
+            open_price = float(df['Open'].iloc[-2])
+            
+        price_str = f"{open_price:.2f}".replace(".", "").replace(",", "")
+        digit_sum = sum(int(char) for char in price_str if char.isdigit())
+        temp_sum = digit_sum
+        while temp_sum >= 10:
+            temp_sum = sum(int(c) for c in str(temp_sum))
+        if digit_sum < 10:
+            final_digit = digit_sum * 100 + digit_sum * 10 + temp_sum
+        else:
+            final_digit = (digit_sum * 10) + temp_sum
+        third_digit = final_digit % 10
+        return open_price, final_digit, third_digit
+    except Exception:
+        return 0.0, 0, 0
 
 # सेशन और टोकन इनिशियलाइज़ेशन
 angel_obj = get_angel_session()
 
-nifty_spot_token = "99926000"
-sensex_spot_token = "999019"
+# स्पॉट डेटा Yahoo Finance से (^NSEI और ^BSESN)
+nifty_open, nifty_dig, nifty_third = get_spot_index_yf("^NSEI")
+sensex_open, sensex_dig, sensex_third = get_spot_index_yf("^BSESN")
 
+# फ्यूचर डेटा Angel One से
 nifty_fut_token = get_current_future_token("NIFTY", "NFO")
 sensex_fut_token = get_current_future_token("SENSEX", "BFO")
 
-# अब एक ही सेशन से सारा डेटा सुरक्षित तरीके से आएगा
-nifty_open, nifty_dig, nifty_third = get_angel_one_data(angel_obj, nifty_spot_token, exchange="NSE")
-nifty_fut_open, nifty_fut_dig, nifty_fut_third = get_angel_one_data(angel_obj, nifty_fut_token, exchange="NFO")
-
-sensex_open, sensex_dig, sensex_third = get_angel_one_data(angel_obj, sensex_spot_token, exchange="BSE")
-sensex_fut_open, sensex_fut_dig, sensex_fut_third = get_angel_one_data(angel_obj, sensex_fut_token, exchange="BFO")
+nifty_fut_open, nifty_fut_dig, nifty_fut_third = get_angel_one_data(angel_obj, nifty_fut_token, "NFO")
+sensex_fut_open, sensex_fut_dig, sensex_fut_third = get_angel_one_data(angel_obj, sensex_fut_token, "BFO")
 
 # कलर कंपेरिजन
 n_col1 = "green" if nifty_third >= nifty_fut_third else "red"
@@ -154,7 +167,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- 3 & 4. Crypto (Bitcoin & Ethereum) - सुरक्षित ---
+# --- 3 & 4. Crypto (Bitcoin & Ethereum) - सुरक्षित एवं अपरिवर्तित ---
 def get_coinbase_daily_open(product_id):
     try:
         url = f"https://api.exchange.coinbase.com/products/{product_id}/candles?granularity=86400"
