@@ -45,10 +45,11 @@ def get_stable_angel_data(today_str):
         if today_str in df['Date'].values:
             row = df[df['Date'] == today_str].iloc[0]
             # यहाँ 8 वैल्यू होनी चाहिए
-            return str(row['Nifty_Idx_Open']), str(row['Nifty_Idx_Fin']), \
+                        return str(row['Nifty_Idx_Open']), str(row['Nifty_Idx_Fin']), \
                    str(row['Nifty_Fut_Open']), str(row['Nifty_Fut_Fin']), \
                    str(row['Sensex_Idx_Open']), str(row['Sensex_Idx_Fin']), \
                    str(row['Sensex_Fut_Open']), str(row['Sensex_Fut_Fin'])
+
 
     # 2. अगर आज का डेटा नहीं है और टाइम 9:08 AM के बाद है, तो नया डेटा लाएं
     if datetime.now().time() >= time(9, 8):
