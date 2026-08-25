@@ -7,7 +7,7 @@ st.title("📊 Manual ITM Signal & Price Dashboard")
 st.sidebar.title("🛠️ Manual Price Inputs")
 st.sidebar.info("यहाँ जो नंबर एक बार डाल देंगे, वह रिफ्रेश करने पर भी सुरक्षित रहेगा।")
 
-# --- Session State Initialization ---
+# --- Session State Initialization (रिफ्रेश होने पर वैल्यू सुरक्षित रखने के लिए) ---
 if 'nifty_spot_val' not in st.session_state:
     st.session_state.nifty_spot_val = 22000.0
 if 'nifty_fut_val' not in st.session_state:
@@ -66,7 +66,7 @@ n_digit_spot_col = "#dc3545" if n_fut_third >= n_spot_third else "#28a745"
 n_digit_fut_col = "#28a745" if n_fut_third >= n_spot_third else "#28a745"
 
 s_price_spot_col = "#dc3545" if manual_sensex_fut >= manual_sensex_spot else "#28a745"
-s_price_fut_col = "#28a745" if manual_sensex_fut >= manual_sensex_spot else "#dc3545"
+s_price_fut_col = "#28a745" if manual_sensex_fut >= manual_sensex_spot else "#28a745"
 s_digit_spot_col = "#dc3545" if s_fut_third >= s_spot_third else "#28a745"
 s_digit_fut_col = "#28a745" if s_fut_third >= s_spot_third else "#28a745"
 
