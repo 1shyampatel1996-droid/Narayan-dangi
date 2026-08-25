@@ -59,37 +59,30 @@ n_fut_final_dig, n_fut_third = calculate_digits(manual_nifty_fut)
 s_spot_final_dig, s_spot_third = calculate_digits(manual_sensex_spot)
 s_fut_final_dig, s_fut_third = calculate_digits(manual_sensex_fut)
 
-# Nifty के लिए स्ट्राइक और टाइप्स निकालें
+# Nifty के लिए स्ट्राइक और टाइप्स
 n_spot_p_strike, n_spot_p_type = get_strike_and_type(manual_nifty_spot, manual_nifty_fut, manual_nifty_spot, True)
 n_spot_d_strike, n_spot_d_type = get_strike_and_type(manual_nifty_spot, n_fut_final_dig, n_spot_final_dig, True)
 
 n_fut_p_strike, n_fut_p_type = get_strike_and_type(manual_nifty_fut, manual_nifty_spot, manual_nifty_fut, True)
 n_fut_d_strike, n_fut_d_type = get_strike_and_type(manual_nifty_fut, n_spot_final_dig, n_fut_final_dig, True)
 
-# Sensex के लिए स्ट्राइक और टाइप्स निकालें
+# Sensex के लिए स्ट्राइक और टाइप्स
 s_spot_p_strike, s_spot_p_type = get_strike_and_type(manual_sensex_spot, manual_sensex_fut, manual_sensex_spot, False)
 s_spot_d_strike, s_spot_d_type = get_strike_and_type(manual_sensex_spot, s_fut_final_dig, s_spot_final_dig, False)
 
 s_fut_p_strike, s_fut_p_type = get_strike_and_type(manual_sensex_fut, manual_sensex_spot, manual_sensex_fut, False)
 s_fut_d_strike, s_fut_d_type = get_strike_and_type(manual_sensex_fut, s_spot_final_dig, s_fut_final_dig, False)
 
-
-# --- डॉट डिसाइड करने का नया लॉजिक (Spot और Future दोनों का आपस में मिलान) ---
+# --- डॉट डिसाइड करने का नियम ---
 def get_match_dot(p_strike, p_type, d_strike, d_type):
     if p_strike == d_strike and p_type == d_type:
         return " 🟢" if p_type == "CE" else " 🔴"
     return ""
 
-# Nifty Spot के लिए डॉट
 n_spot_dot = get_match_dot(n_spot_p_strike, n_spot_p_type, n_spot_d_strike, n_spot_d_type)
-# Nifty Future के लिए डॉट
 n_fut_dot = get_match_dot(n_fut_p_strike, n_fut_p_type, n_fut_d_strike, n_fut_d_type)
-
-# Sensex Spot के लिए डॉट
 s_spot_dot = get_match_dot(s_spot_p_strike, s_spot_p_type, s_spot_d_strike, s_spot_d_type)
-# Sensex Future के लिए डॉट
 s_fut_dot = get_match_dot(s_fut_p_strike, s_fut_p_type, s_fut_d_strike, s_fut_d_type)
-
 
 # कलर्स
 n_price_spot_col = "#dc3545" if manual_nifty_fut >= manual_nifty_spot else "#28a745"
@@ -98,22 +91,21 @@ n_digit_spot_col = "#dc3545" if n_fut_third >= n_spot_third else "#28a745"
 n_digit_fut_col = "#28a745" if n_fut_third >= n_spot_third else "#28a745"
 
 s_price_spot_col = "#dc3545" if manual_sensex_fut >= manual_sensex_spot else "#28a745"
-s_price_fut_col = "#28a745" if manual_sensex_fut >= manual_sensex_spot else "#dc3545"
+s_price_fut_col = "#28a745" if manual_sensex_fut >= manual_sensex_spot else "#28a745"
 s_digit_spot_col = "#dc3545" if s_fut_third >= s_spot_third else "#28a745"
 s_digit_fut_col = "#28a745" if s_fut_third >= s_spot_third else "#28a745"
 
+# --- दोनों स्ट्राइक (प्राइस और डिजिट) दिखाने वाला फॉर्मेट ---
+def make_display(p_strike, p_type, d_strike, d_type, dot):
+    p_col = "#28a745" if p_type == "CE" else "#dc3545"
+    d_col = "#28a745" if d_type == "CE" else "#dc3545"
+    return f"<span style='color: {p_col}; font-weight: bold; font-size: 12px;'>{p_strike}</span> | <span style='color: {d_col}; font-weight: bold; font-size: 12px;'>{d_strike}</span>{dot}"
 
-# --- HTML स्ट्रिंग जनरेटर ---
-def make_display(strike, stype, dot):
-    color = "#28a745" if stype == "CE" else "#dc3545"
-    return f"<span style='color: {color}; font-weight: bold; font-size: 12px;'>{strike}</span>{dot}"
+n_spot_itm_final = make_display(n_spot_p_strike, n_spot_p_type, n_spot_d_strike, n_spot_d_type, n_spot_dot)
+n_fut_itm_final = make_display(n_fut_p_strike, n_fut_p_type, n_fut_d_strike, n_fut_d_type, n_fut_dot)
 
-n_spot_itm_final = make_display(n_spot_p_strike, n_spot_p_type, n_spot_dot)
-n_fut_itm_final = make_display(n_fut_p_strike, n_fut_p_type, n_fut_dot)
-
-s_spot_itm_final = make_display(s_spot_p_strike, s_spot_p_type, s_spot_dot)
-s_fut_itm_final = make_display(s_fut_p_strike, s_fut_p_type, s_fut_dot)
-
+s_spot_itm_final = make_display(s_spot_p_strike, s_spot_p_type, s_spot_d_strike, s_spot_d_type, s_spot_dot)
+s_fut_itm_final = make_display(s_fut_p_strike, s_fut_p_type, s_fut_d_strike, s_fut_d_type, s_fut_dot)
 
 # --- UI डिस्प्ले ---
 st.markdown("### 1. Nifty Group")
@@ -122,13 +114,13 @@ st.markdown(f"""
     <!-- Nifty 50 Row -->
     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 8px; margin-bottom: 8px;">
         <div style="width: 25%; font-weight: bold; color: #fff;">Nifty 50</div>
-        <div style="width: 32%; text-align: right; color: {n_price_spot_col}; font-weight: bold;">{manual_nifty_spot:,.2f}<br>{n_spot_itm_final}</div>
+        <div style="width: 42%; text-align: right; color: {n_price_spot_col}; font-weight: bold;">{manual_nifty_spot:,.2f}<br>{n_spot_itm_final}</div>
         <div style="width: 20%; text-align: right; color: {n_digit_spot_col}; font-weight: bold;">{n_spot_final_dig}</div>
     </div>
     <!-- Future Row -->
     <div style="display: flex; justify-content: space-between; align-items: center;">
         <div style="width: 25%; font-weight: bold; color: #fff;">Future</div>
-        <div style="width: 32%; text-align: right; color: {n_price_fut_col}; font-weight: bold;">{manual_nifty_fut:,.2f}<br>{n_fut_itm_final}</div>
+        <div style="width: 42%; text-align: right; color: {n_price_fut_col}; font-weight: bold;">{manual_nifty_fut:,.2f}<br>{n_fut_itm_final}</div>
         <div style="width: 20%; text-align: right; color: {n_digit_fut_col}; font-weight: bold;">{n_fut_final_dig}</div>
     </div>
 </div>
@@ -140,13 +132,13 @@ st.markdown(f"""
     <!-- Sensex Row -->
     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 8px; margin-bottom: 8px;">
         <div style="width: 25%; font-weight: bold; color: #fff;">Sensex</div>
-        <div style="width: 32%; text-align: right; color: {s_price_spot_col}; font-weight: bold;">{manual_sensex_spot:,.2f}<br>{s_spot_itm_final}</div>
+        <div style="width: 42%; text-align: right; color: {s_price_spot_col}; font-weight: bold;">{manual_sensex_spot:,.2f}<br>{s_spot_itm_final}</div>
         <div style="width: 20%; text-align: right; color: {s_digit_spot_col}; font-weight: bold;">{s_spot_final_dig}</div>
     </div>
     <!-- Future Row -->
     <div style="display: flex; justify-content: space-between; align-items: center;">
         <div style="width: 25%; font-weight: bold; color: #fff;">Future</div>
-        <div style="width: 32%; text-align: right; color: {s_price_fut_col}; font-weight: bold;">{manual_sensex_fut:,.2f}<br>{s_fut_itm_final}</div>
+        <div style="width: 42%; text-align: right; color: {s_price_fut_col}; font-weight: bold;">{manual_sensex_fut:,.2f}<br>{s_fut_itm_final}</div>
         <div style="width: 20%; text-align: right; color: {s_digit_fut_col}; font-weight: bold;">{s_fut_final_dig}</div>
     </div>
 </div>
