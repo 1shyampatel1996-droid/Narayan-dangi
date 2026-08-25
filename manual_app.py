@@ -66,11 +66,11 @@ n_digit_spot_col = "#dc3545" if n_fut_third >= n_spot_third else "#28a745"
 n_digit_fut_col = "#28a745" if n_fut_third >= n_spot_third else "#28a745"
 
 s_price_spot_col = "#dc3545" if manual_sensex_fut >= manual_sensex_spot else "#28a745"
-s_price_fut_col = "#28a745" if manual_sensex_fut >= manual_sensex_spot else "#28a745"
+s_price_fut_col = "#28a745" if manual_sensex_fut >= manual_sensex_spot else "#dc3545"
 s_digit_spot_col = "#dc3545" if s_fut_third >= s_spot_third else "#28a745"
 s_digit_fut_col = "#28a745" if s_fut_third >= s_spot_third else "#28a745"
 
-# --- स्ट्रिक्ट सेम स्ट्राइक मैच लॉजिक (केवल स्ट्राइक और टाइप दोनों समान होने पर डॉट) ---
+# --- स्ट्रिक्ट सेम स्ट्राइक मैच लॉजिक (डॉट वाला नियम) ---
 def format_itm_display(price, compare_val1, compare_val2, digit_val1, digit_val2, is_nifty=True):
     p_strike, p_type = get_strike_and_type(price, compare_val1, compare_val2, is_nifty)
     d_strike, d_type = get_strike_and_type(price, digit_val1, digit_val2, is_nifty)
@@ -79,7 +79,7 @@ def format_itm_display(price, compare_val1, compare_val2, digit_val1, digit_val2
     d_color = "#28a745" if d_type == "CE" else "#dc3545"
     
     match_dot = ""
-    # नियम: स्ट्राइक प्राइस और टाइप दोनों के बराबर होने पर ही डॉट आएगा
+    # नियम: दोनों स्ट्राइक प्राइस और टाइप समान होने पर ही डॉट आएगा
     if p_strike == d_strike and p_type == d_type:
         dot_icon = "🟢" if p_type == "CE" else "🔴"
         match_dot = f" &nbsp; <span style='font-size: 15px;'>{dot_icon}</span>"
