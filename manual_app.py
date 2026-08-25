@@ -37,10 +37,10 @@ def get_itm_recommendation(price, color_status, is_nifty=True):
     
     if color_status == "green":
         itm_strike = base_strike - step if price < base_strike else base_strike
-        return f"🟢 ITM Call: {int(itm_strike)} CE"
+        return f"🟢 {int(itm_strike)} CE"
     else:
         itm_strike = base_strike + step if price > base_strike else base_strike
-        return f"🔴 ITM Put: {int(itm_strike)} PE"
+        return f"🔴 {int(itm_strike)} PE"
 
 # --- डेटा प्रोसेस करें ---
 _, n_spot_third = calculate_digits(manual_nifty_spot)
@@ -70,37 +70,39 @@ n_fut_itm = get_itm_recommendation(manual_nifty_fut, n_price_fut_col, is_nifty=T
 s_spot_itm = get_itm_recommendation(manual_sensex_spot, s_price_spot_col, is_nifty=False)
 s_fut_itm = get_itm_recommendation(manual_sensex_fut, s_price_fut_col, is_nifty=False)
 
-# --- UI डिस्प्ले (मोबाइल के अनुकूल साफ़ कॉलम डिज़ाइन) ---
-st.markdown("### 1. Nifty Group (Manual & ITM)")
+# --- UI डिस्प्ले (मोबाइल फ्रेंडली कॉम्पैक्ट रो डिज़ाइन) ---
+st.markdown("### 1. Nifty Group")
+st.markdown(f"""
+<div style="background-color: #1e1e1e; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 15px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid #333;">
+        <span style="font-weight: bold; color: #fff;">Nifty 50</span>
+        <span style="color: {n_price_spot_col}; font-weight: bold;">{manual_nifty_spot:,.2f}</span>
+        <span style="color: {n_digit_spot_col};">Dig: {n_spot_third}</span>
+        <span style="font-weight: bold; color: #fff;">{n_spot_itm}</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; margin-top: 4px;">
+        <span style="font-weight: bold; color: #fff;">Future</span>
+        <span style="color: {n_price_fut_col}; font-weight: bold;">{manual_nifty_fut:,.2f}</span>
+        <span style="color: {n_digit_fut_col};">Dig: {n_fut_third}</span>
+        <span style="font-weight: bold; color: #fff;">{n_fut_itm}</span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-col1, col2 = st.columns(2)
-with col1:
-    st.markdown("**Nifty 50**")
-    st.markdown(f"<span style='color:{n_price_spot_col}; font-weight:bold; font-size:18px;'>{manual_nifty_spot:,.2f}</span>", unsafe_allow_html=True)
-    st.markdown(f"<span style='color:{n_digit_spot_col};'>Digit: {n_spot_third}</span>", unsafe_allow_html=True)
-    st.markdown(f"**{n_spot_itm}**")
-
-with col2:
-    st.markdown("**Future**")
-    st.markdown(f"<span style='color:{n_price_fut_col}; font-weight:bold; font-size:18px;'>{manual_nifty_fut:,.2f}</span>", unsafe_allow_html=True)
-    st.markdown(f"<span style='color:{n_digit_fut_col};'>Digit: {n_fut_third}</span>", unsafe_allow_html=True)
-    st.markdown(f"**{n_fut_itm}**")
-
-st.markdown("---")
-
-st.markdown("### 2. Sensex Group (Manual & ITM)")
-
-col3, col4 = st.columns(2)
-with col3:
-    st.markdown("**Sensex**")
-    st.markdown(f"<span style='color:{s_price_spot_col}; font-weight:bold; font-size:18px;'>{manual_sensex_spot:,.2f}</span>", unsafe_allow_html=True)
-    st.markdown(f"<span style='color:{s_digit_spot_col};'>Digit: {s_spot_third}</span>", unsafe_allow_html=True)
-    st.markdown(f"**{s_spot_itm}**")
-
-with col4:
-    st.markdown("**Future**")
-    st.markdown(f"<span style='color:{s_price_fut_col}; font-weight:bold; font-size:18px;'>{manual_sensex_fut:,.2f}</span>", unsafe_allow_html=True)
-    st.markdown(f"<span style='color:{s_digit_fut_col};'>Digit: {s_fut_third}</span>", unsafe_allow_html=True)
-    st.markdown(f"**{s_fut_itm}**")
-
-st.markdown("---")
+st.markdown("### 2. Sensex Group")
+st.markdown(f"""
+<div style="background-color: #1e1e1e; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 15px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid #333;">
+        <span style="font-weight: bold; color: #fff;">Sensex</span>
+        <span style="color: {s_price_spot_col}; font-weight: bold;">{manual_sensex_spot:,.2f}</span>
+        <span style="color: {s_digit_spot_col};">Dig: {s_spot_third}</span>
+        <span style="font-weight: bold; color: #fff;">{s_spot_itm}</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; margin-top: 4px;">
+        <span style="font-weight: bold; color: #fff;">Future</span>
+        <span style="color: {s_price_fut_col}; font-weight: bold;">{manual_sensex_fut:,.2f}</span>
+        <span style="color: {s_digit_fut_col};">Dig: {s_fut_third}</span>
+        <span style="font-weight: bold; color: #fff;">{s_fut_itm}</span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
