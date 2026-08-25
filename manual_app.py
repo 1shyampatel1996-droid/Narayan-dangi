@@ -7,29 +7,24 @@ st.title("📊 Manual ITM Signal & Price Dashboard")
 st.sidebar.title("🛠️ Manual Price Inputs")
 st.sidebar.info("यहाँ जो नंबर एक बार डाल देंगे, वह रिफ्रेश करने पर भी सुरक्षित रहेगा।")
 
-# --- Session State Initialization ---
-if 'nifty_spot' not in st.session_state:
-    st.session_state.nifty_spot = 22000.0
-if 'nifty_fut' not in st.session_state:
-    st.session_state.nifty_fut = 22050.0
-if 'sensex_spot' not in st.session_state:
-    st.session_state.sensex_spot = 73000.0
-if 'sensex_fut' not in st.session_state:
-    st.session_state.sensex_fut = 73100.0
+# --- Session State Initialization (डिफ़ॉल्ट वैल्यू सेट करना) ---
+if 'nifty_spot_val' not in st.session_state:
+    st.session_state.nifty_spot_val = 22000.0
+if 'nifty_fut_val' not in st.session_state:
+    st.session_state.nifty_fut_val = 22050.0
+if 'sensex_spot_val' not in st.session_state:
+    st.session_state.sensex_spot_val = 73000.0
+if 'sensex_fut_val' not in st.session_state:
+    st.session_state.sensex_fut_val = 73100.0
 
-# --- 1. मैनुअल इनपुट फील्ड्स ---
+# --- 1. मैनुअल इनपुट फील्ड्स (key पैरामीटर के साथ ताकि वैल्यू फिक्स रहे) ---
 st.sidebar.markdown("### Nifty Group (Gap: 50)")
-st.session_state.nifty_spot = st.sidebar.number_input("Nifty 50 Open", value=st.session_state.nifty_spot, step=50.0)
-st.session_state.nifty_fut = st.sidebar.number_input("Nifty Future Open", value=st.session_state.nifty_fut, step=50.0)
+manual_nifty_spot = st.sidebar.number_input("Nifty 50 Open", key="nifty_spot_val", step=50.0)
+manual_nifty_fut = st.sidebar.number_input("Nifty Future Open", key="nifty_fut_val", step=50.0)
 
 st.sidebar.markdown("### Sensex Group (Gap: 100)")
-st.session_state.sensex_spot = st.sidebar.number_input("Sensex Open", value=st.session_state.sensex_spot, step=100.0)
-st.session_state.sensex_fut = st.sidebar.number_input("Sensex Future Open", value=st.session_state.sensex_fut, step=100.0)
-
-manual_nifty_spot = st.session_state.nifty_spot
-manual_nifty_fut = st.session_state.nifty_fut
-manual_sensex_spot = st.session_state.sensex_spot
-manual_sensex_fut = st.session_state.sensex_fut
+manual_sensex_spot = st.sidebar.number_input("Sensex Open", key="sensex_spot_val", step=100.0)
+manual_sensex_fut = st.sidebar.number_input("Sensex Future Open", key="sensex_fut_val", step=100.0)
 
 # --- सहायक फंक्शन: 3-अंकों का डिजिट कैलकुलेशन ---
 def calculate_digits(open_price):
@@ -59,15 +54,12 @@ def get_strike_and_type(price, compare_val1, compare_val2, is_nifty=True):
 
 # --- डिस्प्ले फॉर्मेटिंग और डॉट लॉजिक ---
 def format_itm_display(price, compare_val1, compare_val2, digit_val1, digit_val2, is_nifty=True):
-    # प्राइस बेस्ड स्ट्राइक और टाइप
     p_strike, p_type = get_strike_and_type(price, compare_val1, compare_val2, is_nifty)
-    # डिजिट बेस्ड स्ट्राइक और टाइप
     d_strike, d_type = get_strike_and_type(price, digit_val1, digit_val2, is_nifty)
     
     p_color = "#28a745" if p_type == "CE" else "#dc3545"
     d_color = "#28a745" if d_type == "CE" else "#dc3545"
     
-    # नियम: अगर दोनों का स्ट्राइक सेम है और टाइप भी सेम है, तभी डॉट दिखाएं, अन्यथा खाली रखें
     match_dot = ""
     if p_strike == d_strike and p_type == d_type:
         dot_icon = "🟢" if p_type == "CE" else "🔴"
