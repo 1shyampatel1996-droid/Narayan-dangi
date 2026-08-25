@@ -30,17 +30,17 @@ def calculate_digits(open_price):
     third_digit = final_digit % 10
     return final_digit, third_digit
 
-# --- स्ट्राइक प्राइस (ITM) निकालने का सटीक लॉजिक (निफ्टी 50 गैप, सेंसेक्स 100 गैप) ---
+# --- स्ट्राइक प्राइस (ITM) निकालने का लॉजिक ---
 def get_itm_recommendation(price, color_status, is_nifty=True):
     step = 50 if is_nifty else 100
     base_strike = round(price / step) * step
     
     if color_status == "green":
         itm_strike = base_strike - step if price < base_strike else base_strike
-        return f"🟢 ITM Call (CE): {int(itm_strike)} CE"
+        return f"🟢 ITM Call: {int(itm_strike)} CE"
     else:
         itm_strike = base_strike + step if price > base_strike else base_strike
-        return f"🔴 ITM Put (PE): {int(itm_strike)} PE"
+        return f"🔴 ITM Put: {int(itm_strike)} PE"
 
 # --- डेटा प्रोसेस करें ---
 _, n_spot_third = calculate_digits(manual_nifty_spot)
@@ -56,53 +56,51 @@ n_digit_fut_col = "green" if n_fut_third >= n_spot_third else "red"
 s_digit_spot_col = "red" if s_fut_third >= s_spot_third else "green"
 s_digit_fut_col = "green" if s_fut_third >= s_spot_third else "red"
 
-# प्राइस कलर (फ्यूचर बनाम स्पॉट)
+# प्राइस कलर
 n_price_spot_col = "red" if manual_nifty_fut >= manual_nifty_spot else "green"
 n_price_fut_col = "green" if manual_nifty_fut >= manual_nifty_spot else "red"
 
 s_price_spot_col = "red" if manual_sensex_fut >= manual_sensex_spot else "green"
 s_price_fut_col = "green" if manual_sensex_fut >= manual_sensex_spot else "red"
 
-# ITM रिकमेंडेशन निकालें (निफ्टी के लिए 50 का गैप, सेंसेक्स के लिए 100 का गैप)
+# ITM रिकमेंडेशन
 n_spot_itm = get_itm_recommendation(manual_nifty_spot, n_price_spot_col, is_nifty=True)
 n_fut_itm = get_itm_recommendation(manual_nifty_fut, n_price_fut_col, is_nifty=True)
 
 s_spot_itm = get_itm_recommendation(manual_sensex_spot, s_price_spot_col, is_nifty=False)
 s_fut_itm = get_itm_recommendation(manual_sensex_fut, s_price_fut_col, is_nifty=False)
 
-# --- UI डिस्प्ले ---
-st.markdown("### 1. Nifty Group (Manual & ITM Analysis)")
-st.markdown(f"""
-<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 16px;">
-    <span style="width: 30%;"><b>Nifty 50</b></span>
-    <span style="width: 25%; text-align: right; color: {n_price_spot_col}; font-weight: bold;">{manual_nifty_spot:,.2f}</span>
-    <span style="width: 15%; text-align: right; color: {n_digit_spot_col}; font-weight: bold;">Digit: {n_spot_third}</span>
-    <span style="width: 30%; text-align: right; font-weight: bold; background-color: #f0f2f6; padding: 2px 6px; border-radius: 4px;">{n_spot_itm}</span>
-</div>
-<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 16px;">
-    <span style="width: 30%;"><b>Future</b></span>
-    <span style="width: 25%; text-align: right; color: {n_price_fut_col}; font-weight: bold;">{manual_nifty_fut:,.2f}</span>
-    <span style="width: 15%; text-align: right; color: {n_digit_fut_col}; font-weight: bold;">Digit: {n_fut_third}</span>
-    <span style="width: 30%; text-align: right; font-weight: bold; background-color: #f0f2f6; padding: 2px 6px; border-radius: 4px;">{n_fut_itm}</span>
-</div>
-""", unsafe_allow_html=True)
+# --- UI डिस्प्ले (मोबाइल के अनुकूल साफ़ कॉलम डिज़ाइन) ---
+st.markdown("### 1. Nifty Group (Manual & ITM)")
+
+col1, col2 = st.columns(2)
+with col1:
+    st.markdown("**Nifty 50**")
+    st.markdown(f"<span style='color:{n_price_spot_col}; font-weight:bold; font-size:18px;'>{manual_nifty_spot:,.2f}</span>", unsafe_allow_html=True)
+    st.markdown(f"<span style='color:{n_digit_spot_col};'>Digit: {n_spot_third}</span>", unsafe_allow_html=True)
+    st.markdown(f"**{n_spot_itm}**")
+
+with col2:
+    st.markdown("**Future**")
+    st.markdown(f"<span style='color:{n_price_fut_col}; font-weight:bold; font-size:18px;'>{manual_nifty_fut:,.2f}</span>", unsafe_allow_html=True)
+    st.markdown(f"<span style='color:{n_digit_fut_col};'>Digit: {n_fut_third}</span>", unsafe_allow_html=True)
+    st.markdown(f"**{n_fut_itm}**")
 
 st.markdown("---")
 
-st.markdown("### 2. Sensex Group (Manual & ITM Analysis)")
-st.markdown(f"""
-<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 16px;">
-    <span style="width: 30%;"><b>Sensex</b></span>
-    <span style="width: 25%; text-align: right; color: {s_price_spot_col}; font-weight: bold;">{manual_sensex_spot:,.2f}</span>
-    <span style="width: 15%; text-align: right; color: {s_digit_spot_col}; font-weight: bold;">Digit: {s_spot_third}</span>
-    <span style="width: 30%; text-align: right; font-weight: bold; background-color: #f0f2f6; padding: 2px 6px; border-radius: 4px;">{s_spot_itm}</span>
-</div>
-<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 16px;">
-    <span style="width: 30%;"><b>Future</b></span>
-    <span style="width: 25%; text-align: right; color: {s_price_fut_col}; font-weight: bold;">{manual_sensex_fut:,.2f}</span>
-    <span style="width: 15%; text-align: right; color: {s_digit_fut_col}; font-weight: bold;">Digit: {n_fut_third}</span>
-    <span style="width: 30%; text-align: right; font-weight: bold; background-color: #f0f2f6; padding: 2px 6px; border-radius: 4px;">{s_fut_itm}</span>
-</div>
-""", unsafe_allow_html=True)
+st.markdown("### 2. Sensex Group (Manual & ITM)")
+
+col3, col4 = st.columns(2)
+with col3:
+    st.markdown("**Sensex**")
+    st.markdown(f"<span style='color:{s_price_spot_col}; font-weight:bold; font-size:18px;'>{manual_sensex_spot:,.2f}</span>", unsafe_allow_html=True)
+    st.markdown(f"<span style='color:{s_digit_spot_col};'>Digit: {s_spot_third}</span>", unsafe_allow_html=True)
+    st.markdown(f"**{s_spot_itm}**")
+
+with col4:
+    st.markdown("**Future**")
+    st.markdown(f"<span style='color:{s_price_fut_col}; font-weight:bold; font-size:18px;'>{manual_sensex_fut:,.2f}</span>", unsafe_allow_html=True)
+    st.markdown(f"<span style='color:{s_digit_fut_col};'>Digit: {s_fut_third}</span>", unsafe_allow_html=True)
+    st.markdown(f"**{s_fut_itm}**")
 
 st.markdown("---")
