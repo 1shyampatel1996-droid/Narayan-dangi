@@ -7,7 +7,7 @@ st.title("📊 Manual ITM Signal & Price Dashboard")
 st.sidebar.title("🛠️ Manual Price Inputs")
 st.sidebar.info("यहाँ जो नंबर एक बार डाल देंगे, वह रिफ्रेश करने पर भी सुरक्षित रहेगा।")
 
-# --- Session State Initialization (रिफ्रेश होने पर वैल्यू सुरक्षित रखने के लिए) ---
+# --- Session State Initialization ---
 if 'nifty_spot_val' not in st.session_state:
     st.session_state.nifty_spot_val = 22000.0
 if 'nifty_fut_val' not in st.session_state:
@@ -70,7 +70,7 @@ s_price_fut_col = "#28a745" if manual_sensex_fut >= manual_sensex_spot else "#dc
 s_digit_spot_col = "#dc3545" if s_fut_third >= s_spot_third else "#28a745"
 s_digit_fut_col = "#28a745" if s_fut_third >= s_spot_third else "#28a745"
 
-# --- स्ट्रिक्ट सेम स्ट्राइक मैच लॉजिक (डॉट वाला नियम) ---
+# --- स्ट्रिक्ट सेम स्ट्राइक मैच लॉजिक (केवल स्ट्राइक और टाइप दोनों समान होने पर डॉट) ---
 def format_itm_display(price, compare_val1, compare_val2, digit_val1, digit_val2, is_nifty=True):
     p_strike, p_type = get_strike_and_type(price, compare_val1, compare_val2, is_nifty)
     d_strike, d_type = get_strike_and_type(price, digit_val1, digit_val2, is_nifty)
@@ -79,7 +79,7 @@ def format_itm_display(price, compare_val1, compare_val2, digit_val1, digit_val2
     d_color = "#28a745" if d_type == "CE" else "#dc3545"
     
     match_dot = ""
-    # नियम: दोनों स्ट्राइक प्राइस और टाइप समान होने पर ही डॉट आएगा
+    # नियम: स्ट्राइक प्राइस और टाइप दोनों के बराबर होने पर ही डॉट आएगा
     if p_strike == d_strike and p_type == d_type:
         dot_icon = "🟢" if p_type == "CE" else "🔴"
         match_dot = f" &nbsp; <span style='font-size: 15px;'>{dot_icon}</span>"
