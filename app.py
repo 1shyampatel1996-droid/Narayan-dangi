@@ -122,22 +122,39 @@ sensex_fut_token = get_current_future_token("SENSEX", "BFO")
 nifty_fut_open, nifty_fut_dig, nifty_fut_third = get_angel_one_data(angel_obj, nifty_fut_token, "NFO")
 sensex_fut_open, sensex_fut_dig, sensex_fut_third = get_angel_one_data(angel_obj, sensex_fut_token, "BFO")
 
-# --- सही कलर कंपेरिजन लॉजिक (बड़ा डिजिट = Green, छोटा डिजिट = Red) ---
-# Nifty Color Logic
+# --- डिजिट कलर कंपेरिजन लॉजिक ---
 if nifty_fut_third >= nifty_third:
-    n_col1 = "green"  # Future
-    n_col2 = "red"    # Spot
+    n_col1 = "green"  # Future Digit
+    n_col2 = "red"    # Spot Digit
 else:
-    n_col1 = "red"    # Future
-    n_col2 = "green"  # Spot
+    n_col1 = "red"    # Future Digit
+    n_col2 = "green"  # Spot Digit
 
-# Sensex Color Logic
 if sensex_fut_third >= sensex_third:
-    s_col1 = "green"  # Future
-    s_col2 = "red"    # Spot
+    s_col1 = "green"  # Future Digit
+    s_col2 = "red"    # Spot Digit
 else:
-    s_col1 = "red"    # Future
-    s_col2 = "green"  # Spot
+    s_col1 = "red"    # Future Digit
+    s_col2 = "green"  # Spot Digit
+
+
+# --- ओपन प्राइस कलर कंपेरिजन लॉजिक (बड़ा प्राइस = Green, छोटा प्राइस = Red) ---
+# Nifty Open Price Colors
+if nifty_fut_open >= nifty_open:
+    n_price_col_fut = "green"
+    n_price_col_spot = "red"
+else:
+    n_price_col_fut = "red"
+    n_price_col_spot = "green"
+
+# Sensex Open Price Colors
+if sensex_fut_open >= sensex_open:
+    s_price_col_fut = "green"
+    s_price_col_spot = "red"
+else:
+    s_price_col_fut = "red"
+    s_price_col_spot = "green"
+
 
 # --- 1. Nifty Group UI ---
 st.markdown("### 1. Nifty Group")
@@ -145,12 +162,12 @@ st.markdown(
     f"""
 <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 16px;">
     <span style="width: 40%;"><b>Nifty 50</b></span>
-    <span style="width: 35%; text-align: right;">{nifty_open:,.2f}</span>
+    <span style="width: 35%; text-align: right; color: {n_price_col_spot}; font-weight: bold;">{nifty_open:,.2f}</span>
     <span style="width: 20%; text-align: right; color: {n_col2}; font-weight: bold;">{nifty_dig}</span>
 </div>
 <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 16px;">
     <span style="width: 40%;"><b>Future</b></span>
-    <span style="width: 35%; text-align: right;">{nifty_fut_open:,.2f}</span>
+    <span style="width: 35%; text-align: right; color: {n_price_col_fut}; font-weight: bold;">{nifty_fut_open:,.2f}</span>
     <span style="width: 20%; text-align: right; color: {n_col1}; font-weight: bold;">{nifty_fut_dig}</span>
 </div>
 """,
@@ -165,12 +182,12 @@ st.markdown(
     f"""
 <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 16px;">
     <span style="width: 40%;"><b>Sensex</b></span>
-    <span style="width: 35%; text-align: right;">{sensex_open:,.2f}</span>
+    <span style="width: 35%; text-align: right; color: {s_price_col_spot}; font-weight: bold;">{sensex_open:,.2f}</span>
     <span style="width: 20%; text-align: right; color: {s_col2}; font-weight: bold;">{sensex_dig}</span>
 </div>
 <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 16px;">
     <span style="width: 40%;"><b>Future</b></span>
-    <span style="width: 35%; text-align: right;">{sensex_fut_open:,.2f}</span>
+    <span style="width: 35%; text-align: right; color: {s_price_col_fut}; font-weight: bold;">{sensex_fut_open:,.2f}</span>
     <span style="width: 20%; text-align: right; color: {s_col1}; font-weight: bold;">{sensex_fut_dig}</span>
 </div>
 """,
