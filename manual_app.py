@@ -7,7 +7,7 @@ st.title("📊 Manual ITM Signal & Price Dashboard")
 st.sidebar.title("🛠️ Manual Price Inputs")
 st.sidebar.info("यहाँ जो नंबर एक बार डाल देंगे, वह रिफ्रेश करने पर भी सुरक्षित रहेगा।")
 
-# --- Session State Initialization (डिफ़ॉल्ट वैल्यू सेट करना) ---
+# --- Session State Initialization ---
 if 'nifty_spot_val' not in st.session_state:
     st.session_state.nifty_spot_val = 22000.0
 if 'nifty_fut_val' not in st.session_state:
@@ -17,7 +17,7 @@ if 'sensex_spot_val' not in st.session_state:
 if 'sensex_fut_val' not in st.session_state:
     st.session_state.sensex_fut_val = 73100.0
 
-# --- 1. मैनुअल इनपुट फील्ड्स (key पैरामीटर के साथ ताकि वैल्यू फिक्स रहे) ---
+# --- 1. मैनुअल इनपुट फील्ड्स ---
 st.sidebar.markdown("### Nifty Group (Gap: 50)")
 manual_nifty_spot = st.sidebar.number_input("Nifty 50 Open", key="nifty_spot_val", step=50.0)
 manual_nifty_fut = st.sidebar.number_input("Nifty Future Open", key="nifty_fut_val", step=50.0)
@@ -52,25 +52,6 @@ def get_strike_and_type(price, compare_val1, compare_val2, is_nifty=True):
         itm_strike = base_strike + step if price > base_strike else base_strike
         return int(itm_strike), "PE"
 
-# --- डिस्प्ले फॉर्मेटिंग और डॉट लॉजिक ---
-def format_itm_display(price, compare_val1, compare_val2, digit_val1, digit_val2, is_nifty=True):
-    p_strike, p_type = get_strike_and_type(price, compare_val1, compare_val2, is_nifty)
-    d_strike, d_type = get_strike_and_type(price, digit_val1, digit_val2, is_nifty)
-    
-    p_color = "#28a745" if p_type == "CE" else "#dc3545"
-    d_color = "#28a745" if d_type == "CE" else "#dc3545"
-    
-    match_dot = ""
-    if p_strike == d_strike and p_type == d_type:
-        dot_icon = "🟢" if p_type == "CE" else "🔴"
-        match_dot = f" &nbsp; <span style='font-size: 15px;'>{dot_icon}</span>"
-        
-    res_str = f"<span style='color: {p_color}; font-weight: bold; font-size: 12px;'>{p_strike}</span>"
-    res_str += f" | <span style='color: {d_color}; font-weight: bold; font-size: 12px;'>{d_strike}</span>"
-    res_str += match_dot
-    
-    return res_str
-
 # --- डेटा प्रोसेस करें ---
 n_spot_final_dig, n_spot_third = calculate_digits(manual_nifty_spot)
 n_fut_final_dig, n_fut_third = calculate_digits(manual_nifty_fut)
@@ -78,23 +59,60 @@ n_fut_final_dig, n_fut_third = calculate_digits(manual_nifty_fut)
 s_spot_final_dig, s_spot_third = calculate_digits(manual_sensex_spot)
 s_fut_final_dig, s_fut_third = calculate_digits(manual_sensex_fut)
 
+# Nifty के लिए स्ट्राइक और टाइप्स निकालें
+n_spot_p_strike, n_spot_p_type = get_strike_and_type(manual_nifty_spot, manual_nifty_fut, manual_nifty_spot, True)
+n_spot_d_strike, n_spot_d_type = get_strike_and_type(manual_nifty_spot, n_fut_final_dig, n_spot_final_dig, True)
+
+n_fut_p_strike, n_fut_p_type = get_strike_and_type(manual_nifty_fut, manual_nifty_spot, manual_nifty_fut, True)
+n_fut_d_strike, n_fut_d_type = get_strike_and_type(manual_nifty_fut, n_spot_final_dig, n_fut_final_dig, True)
+
+# Sensex के लिए स्ट्राइक और टाइप्स निकालें
+s_spot_p_strike, s_spot_p_type = get_strike_and_type(manual_sensex_spot, manual_sensex_fut, manual_sensex_spot, False)
+s_spot_d_strike, s_spot_d_type = get_strike_and_type(manual_sensex_spot, s_fut_final_dig, s_spot_final_dig, False)
+
+s_fut_p_strike, s_fut_p_type = get_strike_and_type(manual_sensex_fut, manual_sensex_spot, manual_sensex_fut, False)
+s_fut_d_strike, s_fut_d_type = get_strike_and_type(manual_sensex_fut, s_spot_final_dig, s_fut_final_dig, False)
+
+
+# --- डॉट डिसाइड करने का नया लॉजिक (Spot और Future दोनों का आपस में मिलान) ---
+def get_match_dot(p_strike, p_type, d_strike, d_type):
+    if p_strike == d_strike and p_type == d_type:
+        return " 🟢" if p_type == "CE" else " 🔴"
+    return ""
+
+# Nifty Spot के लिए डॉट
+n_spot_dot = get_match_dot(n_spot_p_strike, n_spot_p_type, n_spot_d_strike, n_spot_d_type)
+# Nifty Future के लिए डॉट
+n_fut_dot = get_match_dot(n_fut_p_strike, n_fut_p_type, n_fut_d_strike, n_fut_d_type)
+
+# Sensex Spot के लिए डॉट
+s_spot_dot = get_match_dot(s_spot_p_strike, s_spot_p_type, s_spot_d_strike, s_spot_d_type)
+# Sensex Future के लिए डॉट
+s_fut_dot = get_match_dot(s_fut_p_strike, s_fut_p_type, s_fut_d_strike, s_fut_d_type)
+
+
 # कलर्स
 n_price_spot_col = "#dc3545" if manual_nifty_fut >= manual_nifty_spot else "#28a745"
 n_price_fut_col = "#28a745" if manual_nifty_fut >= manual_nifty_spot else "#dc3545"
 n_digit_spot_col = "#dc3545" if n_fut_third >= n_spot_third else "#28a745"
-n_digit_fut_col = "#28a745" if n_fut_third >= n_spot_third else "#dc3545"
+n_digit_fut_col = "#28a745" if n_fut_third >= n_spot_third else "#28a745"
 
 s_price_spot_col = "#dc3545" if manual_sensex_fut >= manual_sensex_spot else "#28a745"
 s_price_fut_col = "#28a745" if manual_sensex_fut >= manual_sensex_spot else "#dc3545"
 s_digit_spot_col = "#dc3545" if s_fut_third >= s_spot_third else "#28a745"
-s_digit_fut_col = "#28a745" if s_fut_third >= s_spot_third else "#dc3545"
+s_digit_fut_col = "#28a745" if s_fut_third >= s_spot_third else "#28a745"
 
-# --- ITM वैल्यूज ---
-n_spot_itm_final = format_itm_display(manual_nifty_spot, manual_nifty_fut, manual_nifty_spot, n_fut_final_dig, n_spot_final_dig, True)
-n_fut_itm_final = format_itm_display(manual_nifty_fut, manual_nifty_spot, manual_nifty_fut, n_spot_final_dig, n_fut_final_dig, True)
 
-s_spot_itm_final = format_itm_display(manual_sensex_spot, manual_sensex_fut, manual_sensex_spot, s_fut_final_dig, s_spot_final_dig, False)
-s_fut_itm_final = format_itm_display(manual_sensex_fut, manual_sensex_spot, manual_sensex_fut, s_spot_final_dig, s_fut_final_dig, False)
+# --- HTML स्ट्रिंग जनरेटर ---
+def make_display(strike, stype, dot):
+    color = "#28a745" if stype == "CE" else "#dc3545"
+    return f"<span style='color: {color}; font-weight: bold; font-size: 12px;'>{strike}</span>{dot}"
+
+n_spot_itm_final = make_display(n_spot_p_strike, n_spot_p_type, n_spot_dot)
+n_fut_itm_final = make_display(n_fut_p_strike, n_fut_p_type, n_fut_dot)
+
+s_spot_itm_final = make_display(s_spot_p_strike, s_spot_p_type, s_spot_dot)
+s_fut_itm_final = make_display(s_fut_p_strike, s_fut_p_type, s_fut_dot)
 
 
 # --- UI डिस्प्ले ---
