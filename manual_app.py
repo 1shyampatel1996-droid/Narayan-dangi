@@ -59,31 +59,6 @@ n_fut_final_dig, n_fut_third = calculate_digits(manual_nifty_fut)
 s_spot_final_dig, s_spot_third = calculate_digits(manual_sensex_spot)
 s_fut_final_dig, s_fut_third = calculate_digits(manual_sensex_fut)
 
-# Nifty के लिए स्ट्राइक और टाइप्स
-n_spot_p_strike, n_spot_p_type = get_strike_and_type(manual_nifty_spot, manual_nifty_fut, manual_nifty_spot, True)
-n_spot_d_strike, n_spot_d_type = get_strike_and_type(manual_nifty_spot, n_fut_final_dig, n_spot_final_dig, True)
-
-n_fut_p_strike, n_fut_p_type = get_strike_and_type(manual_nifty_fut, manual_nifty_spot, manual_nifty_fut, True)
-n_fut_d_strike, n_fut_d_type = get_strike_and_type(manual_nifty_fut, n_spot_final_dig, n_fut_final_dig, True)
-
-# Sensex के लिए स्ट्राइक और टाइप्स
-s_spot_p_strike, s_spot_p_type = get_strike_and_type(manual_sensex_spot, manual_sensex_fut, manual_sensex_spot, False)
-s_spot_d_strike, s_spot_d_type = get_strike_and_type(manual_sensex_spot, s_fut_final_dig, s_spot_final_dig, False)
-
-s_fut_p_strike, s_fut_p_type = get_strike_and_type(manual_sensex_fut, manual_sensex_spot, manual_sensex_fut, False)
-s_fut_d_strike, s_fut_d_type = get_strike_and_type(manual_sensex_fut, s_spot_final_dig, s_fut_final_dig, False)
-
-# --- डॉट डिसाइड करने का नियम ---
-def get_match_dot(p_strike, p_type, d_strike, d_type):
-    if p_strike == d_strike and p_type == d_type:
-        return " 🟢" if p_type == "CE" else " 🔴"
-    return ""
-
-n_spot_dot = get_match_dot(n_spot_p_strike, n_spot_p_type, n_spot_d_strike, n_spot_d_type)
-n_fut_dot = get_match_dot(n_fut_p_strike, n_fut_p_type, n_fut_d_strike, n_fut_d_type)
-s_spot_dot = get_match_dot(s_spot_p_strike, s_spot_p_type, s_spot_d_strike, s_spot_d_type)
-s_fut_dot = get_match_dot(s_fut_p_strike, s_fut_p_type, s_fut_d_strike, s_fut_d_type)
-
 # कलर्स
 n_price_spot_col = "#dc3545" if manual_nifty_fut >= manual_nifty_spot else "#28a745"
 n_price_fut_col = "#28a745" if manual_nifty_fut >= manual_nifty_spot else "#dc3545"
@@ -91,21 +66,36 @@ n_digit_spot_col = "#dc3545" if n_fut_third >= n_spot_third else "#28a745"
 n_digit_fut_col = "#28a745" if n_fut_third >= n_spot_third else "#28a745"
 
 s_price_spot_col = "#dc3545" if manual_sensex_fut >= manual_sensex_spot else "#28a745"
-s_price_fut_col = "#28a745" if manual_sensex_fut >= manual_sensex_spot else "#28a745"
+s_price_fut_col = "#28a745" if manual_sensex_fut >= manual_sensex_spot else "#dc3545"
 s_digit_spot_col = "#dc3545" if s_fut_third >= s_spot_third else "#28a745"
 s_digit_fut_col = "#28a745" if s_fut_third >= s_spot_third else "#28a745"
 
-# --- दोनों स्ट्राइक (प्राइस और डिजिट) दिखाने वाला फॉर्मेट ---
-def make_display(p_strike, p_type, d_strike, d_type, dot):
-    p_col = "#28a745" if p_type == "CE" else "#dc3545"
-    d_col = "#28a745" if d_type == "CE" else "#dc3545"
-    return f"<span style='color: {p_col}; font-weight: bold; font-size: 12px;'>{p_strike}</span> | <span style='color: {d_col}; font-weight: bold; font-size: 12px;'>{d_strike}</span>{dot}"
+# --- स्ट्रिक्ट सेम स्ट्राइक मैच लॉजिक (केवल स्ट्राइक और टाइप दोनों समान होने पर डॉट) ---
+def format_itm_display(price, compare_val1, compare_val2, digit_val1, digit_val2, is_nifty=True):
+    p_strike, p_type = get_strike_and_type(price, compare_val1, compare_val2, is_nifty)
+    d_strike, d_type = get_strike_and_type(price, digit_val1, digit_val2, is_nifty)
+    
+    p_color = "#28a745" if p_type == "CE" else "#dc3545"
+    d_color = "#28a745" if d_type == "CE" else "#dc3545"
+    
+    match_dot = ""
+    # नियम: स्ट्राइक प्राइस और टाइप दोनों के बराबर होने पर ही डॉट आएगा
+    if p_strike == d_strike and p_type == d_type:
+        dot_icon = "🟢" if p_type == "CE" else "🔴"
+        match_dot = f" &nbsp; <span style='font-size: 15px;'>{dot_icon}</span>"
+        
+    res_str = f"<span style='color: {p_color}; font-weight: bold; font-size: 12px;'>{p_strike}</span>"
+    res_str += f" | <span style='color: {d_color}; font-weight: bold; font-size: 12px;'>{d_strike}</span>"
+    res_str += match_dot
+    
+    return res_str
 
-n_spot_itm_final = make_display(n_spot_p_strike, n_spot_p_type, n_spot_d_strike, n_spot_d_type, n_spot_dot)
-n_fut_itm_final = make_display(n_fut_p_strike, n_fut_p_type, n_fut_d_strike, n_fut_d_type, n_fut_dot)
+# --- ITM वैल्यूज ---
+n_spot_itm_final = format_itm_display(manual_nifty_spot, manual_nifty_fut, manual_nifty_spot, n_fut_final_dig, n_spot_final_dig, True)
+n_fut_itm_final = format_itm_display(manual_nifty_fut, manual_nifty_spot, manual_nifty_fut, n_spot_final_dig, n_fut_final_dig, True)
 
-s_spot_itm_final = make_display(s_spot_p_strike, s_spot_p_type, s_spot_d_strike, s_spot_d_type, s_spot_dot)
-s_fut_itm_final = make_display(s_fut_p_strike, s_fut_p_type, s_fut_d_strike, s_fut_d_type, s_fut_dot)
+s_spot_itm_final = format_itm_display(manual_sensex_spot, manual_sensex_fut, manual_sensex_spot, s_fut_final_dig, s_spot_final_dig, False)
+s_fut_itm_final = format_itm_display(manual_sensex_fut, manual_sensex_spot, manual_sensex_fut, s_spot_final_dig, s_fut_final_dig, False)
 
 # --- UI डिस्प्ले ---
 st.markdown("### 1. Nifty Group")
