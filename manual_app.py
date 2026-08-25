@@ -5,16 +5,31 @@ st.set_page_config(page_title="Manual ITM Signal Dashboard", layout="wide")
 st.title("📊 Manual ITM Signal & Price Dashboard")
 
 st.sidebar.title("🛠️ Manual Price Inputs")
-st.sidebar.info("यहाँ आप अपनी मर्जी से ओपन प्राइस दर्ज कर सकते हैं।")
+st.sidebar.info("यहाँ जो नंबर एक बार डाल देंगे, वह रिफ्रेश करने पर भी वैसे ही सुरक्षित रहेगा।")
 
-# --- 1. मैनुअल इनपुट फील्ड्स (साइडबार में) ---
+# --- Session State Initialization ---
+if 'nifty_spot' not in st.session_state:
+    st.session_state.nifty_spot = 22000.0
+if 'nifty_fut' not in st.session_state:
+    st.session_state.nifty_fut = 22050.0
+if 'sensex_spot' not in st.session_state:
+    st.session_state.sensex_spot = 73000.0
+if 'sensex_fut' not in st.session_state:
+    st.session_state.sensex_fut = 73100.0
+
+# --- 1. मैनुअल इनपुट फील्ड्स ---
 st.sidebar.markdown("### Nifty Group (Gap: 50)")
-manual_nifty_spot = st.sidebar.number_input("Nifty 50 Open", value=22000.0, step=50.0)
-manual_nifty_fut = st.sidebar.number_input("Nifty Future Open", value=22050.0, step=50.0)
+st.session_state.nifty_spot = st.sidebar.number_input("Nifty 50 Open", value=st.session_state.nifty_spot, step=50.0)
+st.session_state.nifty_fut = st.sidebar.number_input("Nifty Future Open", value=st.session_state.nifty_fut, step=50.0)
 
 st.sidebar.markdown("### Sensex Group (Gap: 100)")
-manual_sensex_spot = st.sidebar.number_input("Sensex Open", value=73000.0, step=100.0)
-manual_sensex_fut = st.sidebar.number_input("Sensex Future Open", value=73100.0, step=100.0)
+st.session_state.sensex_spot = st.sidebar.number_input("Sensex Open", value=st.session_state.sensex_spot, step=100.0)
+st.session_state.sensex_fut = st.sidebar.number_input("Sensex Future Open", value=st.session_state.sensex_fut, step=100.0)
+
+manual_nifty_spot = st.session_state.nifty_spot
+manual_nifty_fut = st.session_state.nifty_fut
+manual_sensex_spot = st.session_state.sensex_spot
+manual_sensex_fut = st.session_state.sensex_fut
 
 # --- सहायक फंक्शन: 3-अंकों का डिजिट कैलकुलेशन ---
 def calculate_digits(open_price):
@@ -30,17 +45,17 @@ def calculate_digits(open_price):
     third_digit = final_digit % 10
     return final_digit, third_digit
 
-# --- ITM स्ट्राइक प्राइस निकालने का लॉजिक (बिना डॉट्स के) ---
+# --- ITM स्ट्राइक प्राइस (फॉन्ट साइज छोटा किया गया है: font-size: 12px;) ---
 def get_itm_text(price, compare_val1, compare_val2, is_nifty=True):
     step = 50 if is_nifty else 100
     base_strike = round(price / step) * step
     
     if compare_val1 >= compare_val2:
         itm_strike = base_strike - step if price < base_strike else base_strike
-        return f"<span style='color: #28a745; font-weight: bold;'>{int(itm_strike)}</span>"
+        return f"<span style='color: #28a745; font-weight: bold; font-size: 12px;'>{int(itm_strike)}</span>"
     else:
         itm_strike = base_strike + step if price > base_strike else base_strike
-        return f"<span style='color: #dc3545; font-weight: bold;'>{int(itm_strike)}</span>"
+        return f"<span style='color: #dc3545; font-weight: bold; font-size: 12px;'>{int(itm_strike)}</span>"
 
 # --- डेटा प्रोसेस करें ---
 n_spot_final_dig, n_spot_third = calculate_digits(manual_nifty_spot)
