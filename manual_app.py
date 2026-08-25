@@ -30,17 +30,17 @@ def calculate_digits(open_price):
     third_digit = final_digit % 10
     return final_digit, third_digit
 
-# --- ITM स्ट्राइक प्राइस निकालने का लॉजिक ---
+# --- ITM स्ट्राइक प्राइस निकालने का लॉजिक (बिना डॉट्स के) ---
 def get_itm_text(price, compare_val1, compare_val2, is_nifty=True):
     step = 50 if is_nifty else 100
     base_strike = round(price / step) * step
     
     if compare_val1 >= compare_val2:
         itm_strike = base_strike - step if price < base_strike else base_strike
-        return f"<span style='color: #28a745; font-weight: bold;'>🟢 {int(itm_strike)}</span>"
+        return f"<span style='color: #28a745; font-weight: bold;'>{int(itm_strike)}</span>"
     else:
         itm_strike = base_strike + step if price > base_strike else base_strike
-        return f"<span style='color: #dc3545; font-weight: bold;'>🔴 {int(itm_strike)}</span>"
+        return f"<span style='color: #dc3545; font-weight: bold;'>{int(itm_strike)}</span>"
 
 # --- डेटा प्रोसेस करें ---
 n_spot_final_dig, n_spot_third = calculate_digits(manual_nifty_spot)
@@ -72,7 +72,7 @@ s_fut_price_itm = get_itm_text(manual_sensex_fut, manual_sensex_spot, manual_sen
 s_fut_digit_itm = get_itm_text(manual_sensex_fut, s_spot_final_dig, s_fut_final_dig, False)
 
 
-# --- UI डिस्प्ले (एकदम सीधी लाइन / कॉम्पैक्ट रो डिज़ाइन) ---
+# --- UI डिस्प्ले ---
 st.markdown("### 1. Nifty Group")
 st.markdown(f"""
 <div style="background-color: #1e1e1e; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 14px;">
