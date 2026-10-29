@@ -15,17 +15,17 @@ st.set_page_config(
     layout="wide"
 )
 
-# ==================== मोबाइल के लिए कॉम्पैक्ट और छोटी CSS डिज़ाइन ====================
+# ==================== कॉम्पैक्ट और साफ़ CSS डिज़ाइन ====================
 st.markdown("""
     <style>
     h1 { font-size: 18px !important; }
-    h2 { font-size: 16px !important; }
-    h3 { font-size: 14px !important; }
     p, label, .stNumberInput label { font-size: 11px !important; }
-    .stNumberInput { margin-bottom: -15px; }
-    table { font-size: 11px !important; }
-    .compact-box { background-color: #1e293b; padding: 8px 10px; border-radius: 6px; font-size: 11px; color: white; margin-bottom: 8px; text-align: center; }
-    .pin-box { background-color: #064e3b; padding: 10px; border-radius: 6px; font-size: 13px; color: #34d399; font-weight: bold; margin-bottom: 10px; text-align: center; border: 1px solid #059669; }
+    /* इनपुट बॉक्स की चौड़ाई और लंबाई कम करने के लिए */
+    .stNumberInput { max-width: 100% !important; margin-bottom: -10px; }
+    /* स्ट्राइक टेबल का फॉन्ट बेहतर दिखने के लिए */
+    table { font-size: 13px !important; }
+    .compact-box { background-color: #1e293b; padding: 8px; border-radius: 6px; font-size: 11px; color: white; margin-bottom: 8px; text-align: center; }
+    .pin-box { background-color: #064e3b; padding: 10px; border-radius: 6px; font-size: 13px; color: #34d399; font-weight: bold; margin-bottom: 8px; text-align: center; border: 1px solid #059669; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -44,6 +44,12 @@ if "nifty_pinned" not in st.session_state:
 
 if "sensex_pinned" not in st.session_state:
     st.session_state.sensex_pinned = None
+
+if "nifty_open_captured" not in st.session_state:
+    st.session_state.nifty_open_captured = {"spot": 24000.0, "fut": 24025.0}
+
+if "sensex_open_captured" not in st.session_state:
+    st.session_state.sensex_open_captured = {"spot": 73250.0, "fut": 73300.0}
 
 # ==================== डिजिटल रूट और 3-डिजिट कोड कैलकुलेशन ====================
 def get_digital_root(number):
@@ -87,21 +93,31 @@ tab_nifty, tab_sensex = st.tabs(["📊 Nifty", "📈 Sensex"])
 
 # ----------- NIFTY TAB -----------
 with tab_nifty:
-    nifty_spot_open = 24000.50
-    nifty_fut_open = 24025.75
+    # 9:12:10 पर लाइव प्राइस कैप्चर करने का लॉजिक (यदि लाइव डेटा उपलब्ध हो)
+    now_time = datetime.now().time()
+    current_nifty_spot = st.session_state.live_ltp.get("NIFTY_SPOT", 24000.50)
+    current_nifty_fut = st.session_state.live_ltp.get("NIFTY_FUT", 24025.75)
+    
+    # 9:12:10 के आसपास लाइव प्राइस को ओपन मानकर सेट करना
+    if 9 <= now_time.hour <= 15:
+        st.session_state.nifty_open_captured["spot"] = current_nifty_spot
+        st.session_state.nifty_open_captured["fut"] = current_nifty_fut
 
-    ns_code = calculate_custom_digit_code(nifty_spot_open)
-    nf_code = calculate_custom_digit_code(nifty_fut_open)
+    n_spot_open = st.session_state.nifty_open_captured["spot"]
+    n_fut_open = st.session_state.nifty_open_captured["fut"]
 
-    # 1. 9:12:10 ओपन प्राइस और कोड बॉक्स
+    ns_code = calculate_custom_digit_code(n_spot_open)
+    nf_code = calculate_custom_digit_code(n_fut_open)
+
+    # 1. सबसे ऊपर 9:12:10 ओपन प्राइस और कोड बॉक्स
     st.markdown(f"""
         <div class="compact-box">
-            🕒 <b>9:12:10 Nifty Open</b><br>
-            <b>S:</b> {nifty_spot_open} (कोड: <b>{ns_code}</b>) | <b>F:</b> {nifty_fut_open} (कोड: <b>{nf_code}</b>)
+            🕒 <b>9:12:10 Nifty Open (Live)</b><br>
+            <b>S:</b> {n_spot_open} (कोड: <b>{ns_code}</b>) | <b>F:</b> {n_fut_open} (कोड: <b>{nf_code}</b>)
         </div>
     """, unsafe_allow_html=True)
 
-    # 2. सबसे पहले ट्रिगर होने वाली स्ट्राइक का पिन बोर्ड (सबसे ऊपर)
+    # 2. पिन बोर्ड (सबसे पहले ट्रिगर होने वाली स्ट्राइक)
     if st.session_state.nifty_pinned:
         st.markdown(f"""
             <div class="pin-box">
@@ -122,7 +138,7 @@ with tab_nifty:
     with col2:
         n_d2 = st.number_input("डिट 2", 0, 9, 7, key="nd2")
 
-    # 4. तीनों भाव (बाइंग 1, बाइंग 2, सेल शॉर्ट) के 3 बॉक्स एक लाइन में
+    # 4. तीनों भाव (बाइंग 1, बाइंग 2, सेल शॉर्ट) एक ही हॉरिजॉन्टल लाइन में
     b_col1, b_col2, b_col3 = st.columns(3)
     with b_col1:
         n_b1 = st.number_input("बाइंग 1", 1.0, 2000.0, 150.0, key="n_b1")
@@ -131,8 +147,8 @@ with tab_nifty:
     with b_col3:
         n_sell = st.number_input("सेल शॉर्ट", 1.0, 2000.0, 250.0, key="n_sell")
 
-    strikes_d1 = find_digit_strikes(nifty_spot_open, 50, n_d1)
-    strikes_d2 = find_digit_strikes(nifty_spot_open, 50, n_d2)
+    strikes_d1 = find_digit_strikes(n_spot_open, 50, n_d1)
+    strikes_d2 = find_digit_strikes(n_spot_open, 50, n_d2)
 
     contracts = []
     for s in strikes_d1 + strikes_d2:
@@ -140,7 +156,7 @@ with tab_nifty:
             strike_name = f"{s} {opt_type}"
             ltp_val = st.session_state.live_ltp.get(str(s), 0.0)
             
-            # ट्रिगर चेक लॉजिक (यदि LTP बाइंग या सेल भाव के पास match हो)
+            # प्रथम ट्रिगर लॉक लॉजिक
             if ltp_val > 0 and st.session_state.nifty_pinned is None:
                 if abs(ltp_val - n_b1) <= 2.0 or abs(ltp_val - n_b2) <= 2.0 or abs(ltp_val - n_sell) <= 2.0:
                     st.session_state.nifty_pinned = f"{strike_name} @ ₹{ltp_val}"
@@ -154,16 +170,23 @@ with tab_nifty:
 
 # ----------- SENSEX TAB -----------
 with tab_sensex:
-    sensex_spot_open = 73250.25
-    sensex_fut_open = 73300.50
+    current_sensex_spot = st.session_state.live_ltp.get("SENSEX_SPOT", 73250.25)
+    current_sensex_fut = st.session_state.live_ltp.get("SENSEX_FUT", 73300.50)
 
-    ss_code = calculate_custom_digit_code(sensex_spot_open)
-    sf_code = calculate_custom_digit_code(sensex_fut_open)
+    if 9 <= now_time.hour <= 15:
+        st.session_state.sensex_open_captured["spot"] = current_sensex_spot
+        st.session_state.sensex_open_captured["fut"] = current_sensex_fut
+
+    s_spot_open = st.session_state.sensex_open_captured["spot"]
+    s_fut_open = st.session_state.sensex_open_captured["fut"]
+
+    ss_code = calculate_custom_digit_code(s_spot_open)
+    sf_code = calculate_custom_digit_code(s_fut_open)
 
     st.markdown(f"""
         <div class="compact-box">
-            🕒 <b>9:12:10 Sensex Open</b><br>
-            <b>S:</b> {sensex_spot_open} (कोड: <b>{ss_code}</b>) | <b>F:</b> {sensex_fut_open} (कोड: <b>{sf_code}</b>)
+            🕒 <b>9:12:10 Sensex Open (Live)</b><br>
+            <b>S:</b> {s_spot_open} (कोड: <b>{ss_code}</b>) | <b>F:</b> {s_fut_open} (कोड: <b>{sf_code}</b>)
         </div>
     """, unsafe_allow_html=True)
 
@@ -194,8 +217,8 @@ with tab_sensex:
     with s_b_col3:
         s_sell = st.number_input("सेल शॉर्ट ", 1.0, 3000.0, 450.0, key="s_sell")
 
-    s_strikes_d1 = find_digit_strikes(sensex_spot_open, 100, s_d1)
-    s_strikes_d2 = find_digit_strikes(sensex_spot_open, 100, s_d2)
+    s_strikes_d1 = find_digit_strikes(s_spot_open, 100, s_d1)
+    s_strikes_d2 = find_digit_strikes(s_spot_open, 100, s_d2)
 
     s_contracts = []
     for s in s_strikes_d1 + s_strikes_d2:
