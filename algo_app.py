@@ -13,27 +13,18 @@ st.set_page_config(
     layout="wide"
 )
 
-# ==================== CSS Design (Force Single Line on Mobile & English) ====================
+# ==================== CSS Design (Compact Input Boxes & Single Line Fit) ====================
 st.markdown("""
     <style>
     h1 { font-size: 20px !important; }
-    p, label, .stNumberInput label { font-size: 14px !important; font-weight: bold !important; }
-    table { font-size: 14px !important; }
+    p, label, .stNumberInput label { font-size: 13px !important; font-weight: bold !important; }
+    table { font-size: 13px !important; }
     
-    /* MOBILE COLUMN FIX: Force all columns to stay side-by-side without stacking */
-    div[data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        gap: 10px !important;
-    }
-    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        flex: 1 !important;
-        min-width: 0 !important;
-    }
-
-    .compact-box { background-color: #1e293b; padding: 10px; border-radius: 6px; font-size: 13px; color: white; margin-bottom: 8px; text-align: center; }
-    .pin-box { background-color: #064e3b; padding: 10px; border-radius: 6px; font-size: 14px; color: #34d399; font-weight: bold; margin-bottom: 8px; text-align: center; border: 1px solid #059669; }
+    /* Make input boxes compact and prevent screen width expansion */
+    .stNumberInput { max-width: 100% !important; }
+    
+    .compact-box { background-color: #1e293b; padding: 8px; border-radius: 6px; font-size: 12px; color: white; margin-bottom: 8px; text-align: center; }
+    .pin-box { background-color: #064e3b; padding: 8px; border-radius: 6px; font-size: 13px; color: #34d399; font-weight: bold; margin-bottom: 8px; text-align: center; border: 1px solid #059669; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -53,16 +44,16 @@ if "nifty_pinned" not in st.session_state:
 if "sensex_pinned" not in st.session_state:
     st.session_state.sensex_pinned = None
 
-# Day-locked open prices & codes
+# Day-locked open prices & status
 if "nifty_day_locked" not in st.session_state:
     st.session_state.nifty_day_locked = False
-    st.session_state.nifty_s_open = 24000.0
-    st.session_state.nifty_f_open = 24025.0
+    st.session_state.nifty_s_open = 0.0
+    st.session_state.nifty_f_open = 0.0
 
 if "sensex_day_locked" not in st.session_state:
     st.session_state.sensex_day_locked = False
-    st.session_state.sensex_s_open = 73250.0
-    st.session_state.sensex_f_open = 73300.0
+    st.session_state.sensex_s_open = 0.0
+    st.session_state.sensex_f_open = 0.0
 
 # ==================== SmartConnect Session & LTP ====================
 @st.cache_resource
@@ -96,6 +87,8 @@ def get_digital_root(number):
     return num
 
 def calculate_custom_digit_code(price):
+    if price == 0:
+        return "00"
     price_str = str(price).replace(".", "")
     total_sum = sum(int(d) for d in price_str if d.isdigit())
     single_digit = get_digital_root(total_sum)
@@ -104,6 +97,8 @@ def calculate_custom_digit_code(price):
 
 # ==================== Strike Finder ====================
 def find_digit_strikes(current_spot, step, target_digit):
+    if current_spot == 0:
+        current_spot = 24000.0
     base_strike = round(current_spot / step) * step
     matched_strikes = []
     
@@ -135,21 +130,22 @@ with tab_nifty:
     live_n_spot = fetch_live_ltp_from_broker("NSE", "NIFTY", "999920000")
     live_n_fut = fetch_live_ltp_from_broker("NFO", "NIFTY26MARFUT", "0")
     
+    # Capture & lock live open price for the entire day
     if not st.session_state.nifty_day_locked:
         if live_n_spot > 0:
             st.session_state.nifty_s_open = live_n_spot
         if live_n_fut > 0:
             st.session_state.nifty_f_open = live_n_fut
-        if now_time.hour >= 9 and now_time.minute >= 13:
-            st.session_state.nifty_day_locked = True
+        if now_time.hour > 9 or (now_time.hour == 9 and now_time.minute >= 13):
+            if st.session_state.nifty_s_open > 0:
+                st.session_state.nifty_day_locked = True
 
-    n_spot_open = st.session_state.nifty_s_open
-    n_fut_open = st.session_state.nifty_f_open
+    n_spot_open = st.session_state.nifty_s_open if st.session_state.nifty_s_open > 0 else (live_n_spot if live_n_spot > 0 else 24000.0)
+    n_fut_open = st.session_state.nifty_f_open if st.session_state.nifty_f_open > 0 else (live_n_fut if live_n_fut > 0 else 24025.0)
 
     ns_code = calculate_custom_digit_code(n_spot_open)
     nf_code = calculate_custom_digit_code(n_fut_open)
 
-    # Clean display without 9:12:10 text
     st.markdown(f"""
         <div class="compact-box">
             <b>S:</b> {n_spot_open} (Code: <b>{ns_code}</b>) &nbsp;&nbsp;|&nbsp;&nbsp; <b>F:</b> {n_fut_open} (Code: <b>{nf_code}</b>)
@@ -164,7 +160,7 @@ with tab_nifty:
         """, unsafe_allow_html=True)
     else:
         st.markdown("""
-            <div style="background-color: #0f172a; padding: 8px; border-radius: 6px; text-align: center; color: #94a3b8; font-size: 13px; margin-bottom: 8px;">
+            <div style="background-color: #0f172a; padding: 6px; border-radius: 6px; text-align: center; color: #94a3b8; font-size: 12px; margin-bottom: 6px;">
                 📌 Nifty Pin Board: Waiting for trigger...
             </div>
         """, unsafe_allow_html=True)
@@ -217,11 +213,12 @@ with tab_sensex:
             st.session_state.sensex_s_open = live_s_spot
         if live_s_fut > 0:
             st.session_state.sensex_f_open = live_s_fut
-        if now_time.hour >= 9 and now_time.minute >= 13:
-            st.session_state.sensex_day_locked = True
+        if now_time.hour > 9 or (now_time.hour == 9 and now_time.minute >= 13):
+            if st.session_state.sensex_s_open > 0:
+                st.session_state.sensex_day_locked = True
 
-    s_spot_open = st.session_state.sensex_s_open
-    s_fut_open = st.session_state.sensex_f_open
+    s_spot_open = st.session_state.sensex_s_open if st.session_state.sensex_s_open > 0 else (live_s_spot if live_s_spot > 0 else 73250.0)
+    s_fut_open = st.session_state.sensex_f_open if st.session_state.sensex_f_open > 0 else (live_s_fut if live_s_fut > 0 else 73300.0)
 
     ss_code = calculate_custom_digit_code(s_spot_open)
     sf_code = calculate_custom_digit_code(s_fut_open)
@@ -240,7 +237,7 @@ with tab_sensex:
         """, unsafe_allow_html=True)
     else:
         st.markdown("""
-            <div style="background-color: #0f172a; padding: 8px; border-radius: 6px; text-align: center; color: #94a3b8; font-size: 13px; margin-bottom: 8px;">
+            <div style="background-color: #0f172a; padding: 6px; border-radius: 6px; text-align: center; color: #94a3b8; font-size: 12px; margin-bottom: 6px;">
                 📌 Sensex Pin Board: Waiting for trigger...
             </div>
         """, unsafe_allow_html=True)
