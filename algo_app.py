@@ -13,25 +13,28 @@ st.set_page_config(
     layout="wide"
 )
 
-# ==================== CSS Design (Compact & Single Line Inputs) ====================
+# ==================== CSS Design (Perfect Mobile View & Small Boxes) ====================
 st.markdown("""
     <style>
     h1 { font-size: 18px !important; }
     p, label, .stTextInput label { font-size: 11px !important; font-weight: bold !important; }
     table { font-size: 12px !important; }
     
-    /* Make input text boxes compact and side-by-side */
-    div[data-testid="stHorizontalBlock"] {
+    /* मोबाइल पर तीनों इनपुट बॉक्स को एक ही लाइन में और छोटी लंबाई में फिट करने के लिए */
+    div.row-widget.stHorizontal {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
-        gap: 8px !important;
+        gap: 5px !important;
     }
-    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        flex: 1 !important;
+    div.row-widget.stHorizontal > div {
+        flex: 1 1 0% !important;
         min-width: 0 !important;
     }
-    .stTextInput { max-width: 100% !important; margin-bottom: -10px; }
+    .stTextInput input {
+        padding: 4px 6px !important;
+        font-size: 12px !important;
+    }
 
     .compact-box { background-color: #1e293b; padding: 8px; border-radius: 6px; font-size: 12px; color: white; margin-bottom: 6px; text-align: center; }
     .pin-box { background-color: #064e3b; padding: 8px; border-radius: 6px; font-size: 13px; color: #34d399; font-weight: bold; margin-bottom: 6px; text-align: center; border: 1px solid #059669; }
@@ -173,9 +176,12 @@ with tab_nifty:
             </div>
         """, unsafe_allow_html=True)
 
-    # Strike Table & List on Top
-    d_input1 = st.text_input("Digit 1", "3", key="nd1")
-    d_input2 = st.text_input("Digit 2", "7", key="nd2")
+    # 1. Strike Table & List on Top
+    d_col1, d_col2 = st.columns(2)
+    with d_col1:
+        d_input1 = st.text_input("Digit 1", "3", key="nd1")
+    with d_col2:
+        d_input2 = st.text_input("Digit 2", "7", key="nd2")
     
     n_d1 = int(d_input1) if d_input1.isdigit() else 3
     n_d2 = int(d_input2) if d_input2.isdigit() else 7
@@ -183,7 +189,7 @@ with tab_nifty:
     strikes_d1 = find_digit_strikes(n_spot_open, 50, n_d1)
     strikes_d2 = find_digit_strikes(n_spot_open, 50, n_d2)
 
-    # Buy 1, Buy 2, Sell in one horizontal line (3 columns)
+    # Buy 1, Buy 2, Sell in one compact horizontal line
     b_col1, b_col2, b_col3 = st.columns(3)
     with b_col1:
         b_input1 = st.text_input("Buy 1", "150.0", key="nb1")
@@ -254,8 +260,11 @@ with tab_sensex:
             </div>
         """, unsafe_allow_html=True)
 
-    sd_input1 = st.text_input("Digit 1", "5", key="sd1")
-    sd_input2 = st.text_input("Digit 2", "8", key="sd2")
+    sd_col1, sd_col2 = st.columns(2)
+    with sd_col1:
+        sd_input1 = st.text_input("Digit 1", "5", key="sd1")
+    with sd_col2:
+        sd_input2 = st.text_input("Digit 2", "8", key="sd2")
     
     s_d1 = int(sd_input1) if sd_input1.isdigit() else 5
     s_d2 = int(sd_input2) if sd_input2.isdigit() else 8
