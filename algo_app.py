@@ -13,28 +13,16 @@ st.set_page_config(
     layout="wide"
 )
 
-# ==================== CSS Design (Force Single Line & Compact Inputs on Mobile) ====================
+# ==================== CSS Design (Reduced Box Height & Compact View) ====================
 st.markdown("""
     <style>
     h1 { font-size: 18px !important; }
     p, label { font-size: 11px !important; font-weight: bold !important; color: #cbd5e1 !important; }
     table { font-size: 12px !important; }
     
-    /* मोबाइल पर भी तीनों कॉलम को जबरदस्ती एक ही लाइन में रखने के लिए */
-    div[data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        gap: 4px !important;
-    }
-    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        flex: 1 !important;
-        min-width: 0 !important;
-        width: auto !important;
-    }
-    
-    /* इनपुट बॉक्स की चौड़ाई और ऊँचाई दोनों को छोटा और कॉम्पैक्ट करने के लिए */
+    /* इनपुट बॉक्स की लंबाई (ऊंचाई) कम करने के लिए */
     .stTextInput {
+        max-width: 140px !important;
         margin-bottom: -10px !important;
     }
     .stTextInput input {
@@ -42,9 +30,9 @@ st.markdown("""
         color: white !important;
         border: 1px solid #334155 !important;
         border-radius: 4px !important;
-        padding: 2px 4px !important;
-        height: 28px !important;
-        font-size: 11px !important;
+        padding: 2px 6px !important;
+        height: 30px !important;
+        font-size: 12px !important;
     }
 
     .compact-box { background-color: #1e293b; padding: 8px; border-radius: 6px; font-size: 12px; color: white; margin-bottom: 6px; text-align: center; }
