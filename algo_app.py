@@ -1,19 +1,40 @@
+
 import streamlit as st
 import pandas as pd
 import requests
 import pyotp
 import time
 import threading
+from datetime import datetime
 from SmartApi import SmartConnect
 from SmartApi.smartWebSocketV2 import SmartWebSocketV2
 
-# ==================== आपकी भरी हुई डिटेल्स ====================
+# ==================== पेज सेटअप और विशिष्ट आइकॉन ====================
+st.set_page_config(
+    page_title="एल्गो स्ट्राइक स्कैनर", 
+    page_icon="🎯",  # अलग आइकॉन ताकि दूसरे ऐप्स से कंफ्यूजन न हो
+    layout="wide"
+)
+
+# ==================== मोबाइल के लिए कॉम्पैक्ट CSS डिज़ाइन ====================
+st.markdown("""
+    <style>
+    h1 { font-size: 20px !important; }
+    h2 { font-size: 18px !important; }
+    h3 { font-size: 16px !important; }
+    p, label, .stNumberInput label { font-size: 12px !important; }
+    .stNumberInput { width: 100% !important; margin-bottom: -10px; }
+    table { font-size: 12px !important; }
+    </style>
+""", unsafe_allow_html=True)
+
+# ==================== आपकी API डिटेल्स ====================
 API_KEY = "GAuh625s"
 CLIENT_CODE = "N417637"
 PASSWORD = "1003"
 TOTP_SECRET = "2YRKKEYE2HZD562KPXZTK7PXJY"
 
-# ==================== ग्लोबल स्टेट और लाइव डेटा होल्डर ====================
+# ==================== ग्लोबल स्टेट ====================
 if "live_ltp" not in st.session_state:
     st.session_state.live_ltp = {}
 
@@ -23,14 +44,21 @@ if "nifty_pinned" not in st.session_state:
 if "sensex_pinned" not in st.session_state:
     st.session_state.sensex_pinned = None
 
-# ==================== डिजिटल रूट (सिंगल डिजिट) कैलकुलेशन ====================
+# ==================== डिजिटल रूट और 3-डिजिट कोड कैलकुलेशन ====================
 def get_digital_root(number):
     num = int(abs(number))
     while num >= 10:
         num = sum(int(digit) for digit in str(num))
     return num
 
-# ==================== सिंगल डिजिट आधारित स्ट्राइक फाइंडर ====================
+def calculate_custom_digit_code(price):
+    price_str = str(price).replace(".", "")
+    total_sum = sum(int(d) for d in price_str if d.isdigit())
+    single_digit = get_digital_root(total_sum)
+    code_3digit = f"{total_sum}{single_digit}"
+    return total_sum, single_digit, code_3digit
+
+# ==================== स्ट्राइक फाइंडर ====================
 def find_digit_strikes(current_spot, step, target_digit):
     base_strike = round(current_spot / step) * step
     matched_strikes = []
@@ -51,125 +79,120 @@ def find_digit_strikes(current_spot, step, target_digit):
     
     return [main_strike, rev_strike, next_strike]
 
-# ==================== ANGEL ONE WEBSOCKET CONNECTION ====================
-def init_angel_websocket():
-    try:
-        smart_api = SmartConnect(api_key=API_KEY)
-        totp = pyotp.TOTP(TOTP_SECRET).now()
-        data = smart_api.generateSession(CLIENT_CODE, PASSWORD, totp)
-        
-        if not data['status']:
-            st.error(f"Angel One लॉगिन विफल: {data['message']}")
-            return None
-            
-        feed_token = smart_api.getfeedToken()
-        jwt_token = data['data']['jwtToken']
-        
-        sws = SmartWebSocketV2(
-            auth_token=jwt_token,
-            api_key=API_KEY,
-            client_code=CLIENT_CODE,
-            feed_token=feed_token
-        )
-        
-        def on_data(wsapp, message):
-            import json
-            try:
-                msg = json.loads(message)
-                token = msg.get("token")
-                ltp = msg.get("last_traded_price", 0) / 100.0
-                if token and ltp > 0:
-                    st.session_state.live_ltp[token] = ltp
-            except Exception as e:
-                pass
+# ==================== STREAMLIT UI ====================
+st.title("⚡ एल्गो स्ट्राइक स्कैनर (Buy & Sell/Short)")
 
-        def on_open(wsapp):
-            token_list = [{
-                "action": 1,
-                "mode": 1,
-                "exchangeType": 2, 
-                "tokens": ["55432"] 
-            }]
-            sws.subscribe("algo_stream", 1, token_list)
-
-        sws.on_open = on_open
-        sws.on_data = on_data
-        
-        ws_thread = threading.Thread(target=sws.connect, daemon=True)
-        ws_thread.start()
-        return sws
-    except Exception as e:
-        st.warning(f"WebSocket कनेक्शन शुरू नहीं हो सका: {e}")
-        return None
-
-# ==================== STREAMLIT UI LAYOUT ====================
-st.set_page_config(page_title="लाइव एल्गो ट्रेडिंग डैशबोर्ड", layout="wide")
-
-st.title("⚡ लाइव एल्गो स्ट्राइक स्कैनर (Angel One WebSocket)")
-st.caption("Nifty 50 एवं Sensex - लाइव टिक बाय टिक ऑटो मैचिंग")
-
-tab_nifty, tab_sensex = st.tabs(["📊 Nifty 50 डैशबोर्ड", "📈 Sensex डैशबोर्ड"])
+tab_nifty, tab_sensex = st.tabs(["📊 Nifty", "📈 Sensex"])
 
 # ----------- NIFTY TAB -----------
 with tab_nifty:
-    st.subheader("Nifty 50 सेटिंग्स")
+    st.markdown("**Nifty 50 सेटिंग्स (Buy & Sell)**")
+    
+    # इनपुट कॉलम्स (बाइंग और सेल शॉर्ट के लिए)
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        n_d1 = st.number_input("निफ्टी स्ट्राइक डिजिट 1", 0, 9, 3, key="nd1")
+        n_d1 = st.number_input("डिट 1", 0, 9, 3, key="nd1")
     with col2:
-        n_d2 = st.number_input("निफ्टी स्ट्राइक डिजिट 2", 0, 9, 7, key="nd2")
+        n_d2 = st.number_input("डिट 2", 0, 9, 7, key="nd2")
     with col3:
-        n_p1 = st.number_input("निफ्टी बाइंग भाव 1", 1.0, 1000.0, 150.0, key="np1")
+        n_buy = st.number_input("बाइंग भाव", 1.0, 2000.0, 150.0, key="n_buy")
     with col4:
-        n_p2 = st.number_input("निफ्टी बाइंग भाव 2", 1.0, 1000.0, 250.0, key="np2")
+        n_sell = st.number_input("सेल शॉर्ट भाव", 1.0, 2000.0, 250.0, key="n_sell")
 
-    nifty_spot = 24000.0  
-    strikes_d1 = find_digit_strikes(nifty_spot, 50, n_d1)
-    strikes_d2 = find_digit_strikes(nifty_spot, 50, n_d2)
+    nifty_spot_open = 24000.50
+    nifty_fut_open = 24025.75
+
+    ns_sum, ns_single, ns_code = calculate_custom_digit_code(nifty_spot_open)
+    nf_sum, nf_single, nf_code = calculate_custom_digit_code(nifty_fut_open)
 
     st.markdown("---")
-    st.markdown("### 📌 Nifty फर्स्ट ट्रिगर पिन बोर्ड (दिनभर के लिए लॉक)")
-    if st.session_state.nifty_pinned:
-        st.success(f"🎯 **सबसे पहले ट्रिगर हुई स्ट्राइक:** {st.session_state.nifty_pinned}")
-    else:
-        st.info("अभी तक कोई स्ट्राइक ±3% एग्जैक्ट ट्रिगर ज़ोन में नहीं आई है...")
+    st.markdown("🕒 **9:12:10 AM ओपन सेटलमेंट कोड (Nifty)**")
+    nc1, nc2 = st.columns(2)
+    with nc1:
+        st.info(f"**Spot Open:** {nifty_spot_open}\n\n🔢 **योग:** {ns_sum} | 🎯 **सिंगल:** {ns_single} | ✨ **कोड:** **{ns_code}**")
+    with nc2:
+        st.info(f"**Future Open:** {nifty_fut_open}\n\n🔢 **योग:** {nf_sum} | 🎯 **सिंगल:** {nf_single} | ✨ **कोड:** **{nf_code}**")
 
-    st.subheader("📋 मॉनिटर हो रही स्ट्राइक्स (CE & PE)")
+    strikes_d1 = find_digit_strikes(nifty_spot_open, 50, n_d1)
+    strikes_d2 = find_digit_strikes(nifty_spot_open, 50, n_d2)
+
+    st.markdown("📌 **Nifty पिन बोर्ड**")
+    if st.session_state.nifty_pinned:
+        st.success(f"🎯 {st.session_state.nifty_pinned}")
+    else:
+        st.info("ट्रिगर प्रतीक्षारत...")
+
+    st.markdown("📋 **स्ट्राइक्स (CE & PE) - Buy & Sell Tracking**")
     contracts = []
     for s in strikes_d1 + strikes_d2:
-        contracts.append({"Strike": f"{s} CE", "LTP": st.session_state.live_ltp.get(str(s), 0.0)})
-        contracts.append({"Strike": f"{s} PE", "LTP": st.session_state.live_ltp.get(str(s), 0.0)})
+        ltp_val = st.session_state.live_ltp.get(str(s), 0.0)
+        contracts.append({
+            "Strike": f"{s} CE", 
+            "LTP": ltp_val, 
+            "Buy Target": n_buy, 
+            "Sell Target": n_sell
+        })
+        contracts.append({
+            "Strike": f"{s} PE", 
+            "LTP": ltp_val, 
+            "Buy Target": n_buy, 
+            "Sell Target": n_sell
+        })
     
     st.table(pd.DataFrame(contracts))
 
 # ----------- SENSEX TAB -----------
 with tab_sensex:
-    st.subheader("Sensex सेटिंग्स")
+    st.markdown("**Sensex सेटिंग्स (Buy & Sell)**")
+    
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        s_d1 = st.number_input("सेंसेक्स स्ट्राइक डिजिट 1", 0, 9, 5, key="sd1")
+        s_d1 = st.number_input("डिट 1 ", 0, 9, 5, key="sd1")
     with col2:
-        s_d2 = st.number_input("सेंसेक्स स्ट्राइक डिजिट 2", 0, 9, 8, key="sd2")
+        s_d2 = st.number_input("डिट 2 ", 0, 9, 8, key="sd2")
     with col3:
-        s_p1 = st.number_input("सेंसेक्स बाइंग भाव 1", 1.0, 2000.0, 300.0, key="sp1")
+        s_buy = st.number_input("बाइंग भाव ", 1.0, 3000.0, 300.0, key="s_buy")
     with col4:
-        s_p2 = st.number_input("सेंसेक्स बाइंग भाव 2", 1.0, 2000.0, 450.0, key="sp2")
+        s_sell = st.number_input("सेल शॉर्ट भाव ", 1.0, 3000.0, 450.0, key="s_sell")
 
-    sensex_spot = 73000.0  
-    s_strikes_d1 = find_digit_strikes(sensex_spot, 100, s_d1)
-    s_strikes_d2 = find_digit_strikes(sensex_spot, 100, s_d2)
+    sensex_spot_open = 73250.25
+    sensex_fut_open = 73300.50
+
+    ss_sum, ss_single, ss_code = calculate_custom_digit_code(sensex_spot_open)
+    sf_sum, sf_single, sf_code = calculate_custom_digit_code(sensex_fut_open)
 
     st.markdown("---")
-    st.markdown("### 📌 Sensex फर्स्ट ट्रिगर पिन बोर्ड (दिनभर के लिए लॉक)")
-    if st.session_state.sensex_pinned:
-        st.success(f"🎯 **सबसे पहले ट्रिगर हुई स्ट्राइक:** {st.session_state.sensex_pinned}")
-    else:
-        st.info("अभी तक कोई स्ट्राइक ±3% एग्जैक्ट ट्रिगर ज़ोन में नहीं आई है...")
+    st.markdown("🕒 **9:12:10 AM ओपन सेटलमेंट कोड (Sensex)**")
+    sc1, sc2 = st.columns(2)
+    with sc1:
+        st.info(f"**Spot Open:** {sensex_spot_open}\n\n🔢 **योग:** {ss_sum} | 🎯 **सिंगल:** {ss_single} | ✨ **कोड:** **{ss_code}**")
+    with sc2:
+        st.info(f"**Future Open:** {sensex_fut_open}\n\n🔢 **योग:** {sf_sum} | 🎯 **सिंगल:** {sf_single} | ✨ **कोड:** **{sf_code}**")
 
-    st.subheader("📋 मॉनिटर हो रही स्ट्राइक्स (CE & PE)")
+    s_strikes_d1 = find_digit_strikes(sensex_spot_open, 100, s_d1)
+    s_strikes_d2 = find_digit_strikes(sensex_spot_open, 100, s_d2)
+
+    st.markdown("📌 **Sensex पिन बोर्ड**")
+    if st.session_state.sensex_pinned:
+        st.success(f"🎯 {st.session_state.sensex_pinned}")
+    else:
+        st.info("ट्रिगर प्रतीक्षारत...")
+
+    st.markdown("📋 **स्ट्राइक्स (CE & PE) - Buy & Sell Tracking**")
     s_contracts = []
     for s in s_strikes_d1 + s_strikes_d2:
-        s_contracts.append({"Strike": f"{s} CE", "LTP": st.session_state.live_ltp.get(str(s), 0.0)})
-        s_contracts.append({"Strike": f"{s} PE", "LTP": st.session_state.live_ltp.get(str(s), 0.0)})
+        ltp_val = st.session_state.live_ltp.get(str(s), 0.0)
+        s_contracts.append({
+            "Strike": f"{s} CE", 
+            "LTP": ltp_val, 
+            "Buy Target": s_buy, 
+            "Sell Target": s_sell
+        })
+        s_contracts.append({
+            "Strike": f"{s} PE", 
+            "LTP": ltp_val, 
+            "Buy Target": s_buy, 
+            "Sell Target": s_sell
+        })
     
     st.table(pd.DataFrame(s_contracts))
