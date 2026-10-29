@@ -13,27 +13,37 @@ st.set_page_config(
     layout="wide"
 )
 
-# ==================== CSS Design (Perfect Mobile View & Small Boxes) ====================
+# ==================== CSS Design (Compact & Single Line Inputs) ====================
 st.markdown("""
     <style>
     h1 { font-size: 18px !important; }
-    p, label, .stTextInput label { font-size: 11px !important; font-weight: bold !important; }
+    p, label { font-size: 11px !important; font-weight: bold !important; color: #cbd5e1 !important; }
     table { font-size: 12px !important; }
     
-    /* मोबाइल पर तीनों इनपुट बॉक्स को एक ही लाइन में और छोटी लंबाई में फिट करने के लिए */
-    div.row-widget.stHorizontal {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        gap: 5px !important;
+    /* Force side-by-side layout for small compact inputs */
+    .input-row {
+        display: flex;
+        flex-direction: row;
+        gap: 8px;
+        width: 100%;
+        margin-bottom: 8px;
     }
-    div.row-widget.stHorizontal > div {
-        flex: 1 1 0% !important;
-        min-width: 0 !important;
+    .input-group {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
     }
-    .stTextInput input {
-        padding: 4px 6px !important;
-        font-size: 12px !important;
+    .input-group label {
+        margin-bottom: 2px;
+    }
+    .input-group input {
+        background-color: #1e293b;
+        color: white;
+        border: 1px solid #334155;
+        border-radius: 4px;
+        padding: 6px 8px;
+        font-size: 13px;
+        width: 100%;
     }
 
     .compact-box { background-color: #1e293b; padding: 8px; border-radius: 6px; font-size: 12px; color: white; margin-bottom: 6px; text-align: center; }
@@ -176,31 +186,39 @@ with tab_nifty:
             </div>
         """, unsafe_allow_html=True)
 
-    # 1. Strike Table & List on Top
-    d_col1, d_col2 = st.columns(2)
-    with d_col1:
-        d_input1 = st.text_input("Digit 1", "3", key="nd1")
-    with d_col2:
-        d_input2 = st.text_input("Digit 2", "7", key="nd2")
-    
-    n_d1 = int(d_input1) if d_input1.isdigit() else 3
-    n_d2 = int(d_input2) if d_input2.isdigit() else 7
+    if "n_d1_val" not in st.session_state: st.session_state.n_d1_val = "3"
+    if "n_d2_val" not in st.session_state: st.session_state.n_d2_val = "7"
+    if "n_b1_val" not in st.session_state: st.session_state.n_b1_val = "150.0"
+    if "n_b2_val" not in st.session_state: st.session_state.n_b2_val = "200.0"
+    if "n_sell_val" not in st.session_state: st.session_state.n_sell_val = "250.0"
+
+    col1, col2 = st.columns(2)
+    with col1:
+        n_d1_str = st.text_input("Digit 1", st.session_state.n_d1_val, key="nd1_input")
+        st.session_state.n_d1_val = n_d1_str
+    with col2:
+        n_d2_str = st.text_input("Digit 2", st.session_state.n_d2_val, key="nd2_input")
+        st.session_state.n_d2_val = n_d2_str
+
+    b_col1, b_col2, b_col3 = st.columns(3)
+    with b_col1:
+        nb1_str = st.text_input("Buy 1", st.session_state.n_b1_val, key="nb1_input")
+        st.session_state.n_b1_val = nb1_str
+    with b_col2:
+        nb2_str = st.text_input("Buy 2", st.session_state.n_b2_val, key="nb2_input")
+        st.session_state.n_b2_val = nb2_str
+    with b_col3:
+        nsell_str = st.text_input("Sell", st.session_state.n_sell_val, key="nsell_input")
+        st.session_state.n_sell_val = nsell_str
+
+    n_d1 = int(n_d1_str) if n_d1_str.isdigit() else 3
+    n_d2 = int(n_d2_str) if n_d2_str.isdigit() else 7
+    n_b1 = float(nb1_str) if nb1_str.replace('.', '', 1).isdigit() else 150.0
+    n_b2 = float(nb2_str) if nb2_str.replace('.', '', 1).isdigit() else 200.0
+    n_sell = float(nsell_str) if nsell_str.replace('.', '', 1).isdigit() else 250.0
 
     strikes_d1 = find_digit_strikes(n_spot_open, 50, n_d1)
     strikes_d2 = find_digit_strikes(n_spot_open, 50, n_d2)
-
-    # Buy 1, Buy 2, Sell in one compact horizontal line
-    b_col1, b_col2, b_col3 = st.columns(3)
-    with b_col1:
-        b_input1 = st.text_input("Buy 1", "150.0", key="nb1")
-    with b_col2:
-        b_input2 = st.text_input("Buy 2", "200.0", key="nb2")
-    with b_col3:
-        s_input = st.text_input("Sell", "250.0", key="nsell")
-
-    n_b1 = float(b_input1) if b_input1.replace('.', '', 1).isdigit() else 150.0
-    n_b2 = float(b_input2) if b_input2.replace('.', '', 1).isdigit() else 200.0
-    n_sell = float(s_input) if s_input.replace('.', '', 1).isdigit() else 250.0
 
     contracts = []
     for s in strikes_d1 + strikes_d2:
@@ -260,29 +278,39 @@ with tab_sensex:
             </div>
         """, unsafe_allow_html=True)
 
+    if "s_d1_val" not in st.session_state: st.session_state.s_d1_val = "5"
+    if "s_d2_val" not in st.session_state: st.session_state.s_d2_val = "8"
+    if "s_b1_val" not in st.session_state: st.session_state.s_b1_val = "300.0"
+    if "s_b2_val" not in st.session_state: st.session_state.s_b2_val = "350.0"
+    if "s_sell_val" not in st.session_state: st.session_state.s_sell_val = "450.0"
+
     sd_col1, sd_col2 = st.columns(2)
     with sd_col1:
-        sd_input1 = st.text_input("Digit 1", "5", key="sd1")
+        sd1_str = st.text_input("Digit 1", st.session_state.s_d1_val, key="sd1_input")
+        st.session_state.s_d1_val = sd1_str
     with sd_col2:
-        sd_input2 = st.text_input("Digit 2", "8", key="sd2")
-    
-    s_d1 = int(sd_input1) if sd_input1.isdigit() else 5
-    s_d2 = int(sd_input2) if sd_input2.isdigit() else 8
-
-    s_strikes_d1 = find_digit_strikes(s_spot_open, 100, s_d1)
-    s_strikes_d2 = find_digit_strikes(s_spot_open, 100, s_d2)
+        sd2_str = st.text_input("Digit 2", st.session_state.s_d2_val, key="sd2_input")
+        st.session_state.s_d2_val = sd2_str
 
     sb_col1, sb_col2, sb_col3 = st.columns(3)
     with sb_col1:
-        sb_input1 = st.text_input("Buy 1", "300.0", key="sb1")
+        sb1_str = st.text_input("Buy 1", st.session_state.s_b1_val, key="sb1_input")
+        st.session_state.s_b1_val = sb1_str
     with sb_col2:
-        sb_input2 = st.text_input("Buy 2", "350.0", key="sb2")
+        sb2_str = st.text_input("Buy 2", st.session_state.s_b2_val, key="sb2_input")
+        st.session_state.s_b2_val = sb2_str
     with sb_col3:
-        ss_input = st.text_input("Sell", "450.0", key="ssell")
+        ssell_str = st.text_input("Sell", st.session_state.s_sell_val, key="ssell_input")
+        st.session_state.s_sell_val = ssell_str
 
-    s_b1 = float(sb_input1) if sb_input1.replace('.', '', 1).isdigit() else 300.0
-    s_b2 = float(sb_input2) if sb_input2.replace('.', '', 1).isdigit() else 350.0
-    s_sell = float(ss_input) if ss_input.replace('.', '', 1).isdigit() else 450.0
+    s_d1 = int(sd1_str) if sd1_str.isdigit() else 5
+    s_d2 = int(sd2_str) if sd2_str.isdigit() else 8
+    s_b1 = float(sb1_str) if sb1_str.replace('.', '', 1).isdigit() else 300.0
+    s_b2 = float(sb2_str) if sb2_str.replace('.', '', 1).isdigit() else 350.0
+    s_sell = float(ssell_str) if ssell_str.replace('.', '', 1).isdigit() else 450.0
+
+    s_strikes_d1 = find_digit_strikes(s_spot_open, 100, s_d1)
+    s_strikes_d2 = find_digit_strikes(s_spot_open, 100, s_d2)
 
     s_contracts = []
     for s in s_strikes_d1 + s_strikes_d2:
