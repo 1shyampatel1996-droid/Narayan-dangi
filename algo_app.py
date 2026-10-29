@@ -13,18 +13,14 @@ st.set_page_config(
     layout="wide"
 )
 
-# ==================== CSS Design (Compact Input Boxes & Single Line Fit) ====================
+# ==================== CSS Design (No Plus/Minus & Clean Layout) ====================
 st.markdown("""
     <style>
-    h1 { font-size: 20px !important; }
-    p, label, .stNumberInput label { font-size: 13px !important; font-weight: bold !important; }
-    table { font-size: 13px !important; }
-    
-    /* Make input boxes compact and prevent screen width expansion */
-    .stNumberInput { max-width: 100% !important; }
-    
-    .compact-box { background-color: #1e293b; padding: 8px; border-radius: 6px; font-size: 12px; color: white; margin-bottom: 8px; text-align: center; }
-    .pin-box { background-color: #064e3b; padding: 8px; border-radius: 6px; font-size: 13px; color: #34d399; font-weight: bold; margin-bottom: 8px; text-align: center; border: 1px solid #059669; }
+    h1 { font-size: 18px !important; }
+    p, label, .stTextInput label { font-size: 12px !important; font-weight: bold !important; }
+    table { font-size: 12px !important; }
+    .compact-box { background-color: #1e293b; padding: 8px; border-radius: 6px; font-size: 12px; color: white; margin-bottom: 6px; text-align: center; }
+    .pin-box { background-color: #064e3b; padding: 8px; border-radius: 6px; font-size: 13px; color: #34d399; font-weight: bold; margin-bottom: 6px; text-align: center; border: 1px solid #059669; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -44,7 +40,6 @@ if "nifty_pinned" not in st.session_state:
 if "sensex_pinned" not in st.session_state:
     st.session_state.sensex_pinned = None
 
-# Day-locked open prices & status
 if "nifty_day_locked" not in st.session_state:
     st.session_state.nifty_day_locked = False
     st.session_state.nifty_s_open = 0.0
@@ -130,7 +125,6 @@ with tab_nifty:
     live_n_spot = fetch_live_ltp_from_broker("NSE", "NIFTY", "999920000")
     live_n_fut = fetch_live_ltp_from_broker("NFO", "NIFTY26MARFUT", "0")
     
-    # Capture & lock live open price for the entire day
     if not st.session_state.nifty_day_locked:
         if live_n_spot > 0:
             st.session_state.nifty_s_open = live_n_spot
@@ -165,24 +159,23 @@ with tab_nifty:
             </div>
         """, unsafe_allow_html=True)
 
-    # Digit 1 & Digit 2 in one horizontal line
-    d_col1, d_col2 = st.columns(2)
-    with d_col1:
-        n_d1 = st.number_input("Digit 1", 0, 9, 3, key="nd1")
-    with d_col2:
-        n_d2 = st.number_input("Digit 2", 0, 9, 7, key="nd2")
-
-    # Buy 1, Buy 2, Sell in one horizontal line (3 columns)
-    b_col1, b_col2, b_col3 = st.columns(3)
-    with b_col1:
-        n_b1 = st.number_input("Buy 1", 1.0, 2000.0, 150.0, key="n_b1")
-    with b_col2:
-        n_b2 = st.number_input("Buy 2", 1.0, 2000.0, 200.0, key="n_b2")
-    with b_col3:
-        n_sell = st.number_input("Sell", 1.0, 2000.0, 250.0, key="n_sell")
+    # 1. First, Strike List & Table on Top
+    d_input1 = st.text_input("Digit 1", "3", key="nd1")
+    d_input2 = st.text_input("Digit 2", "7", key="nd2")
+    
+    n_d1 = int(d_input1) if d_input1.isdigit() else 3
+    n_d2 = int(d_input2) if d_input2.isdigit() else 7
 
     strikes_d1 = find_digit_strikes(n_spot_open, 50, n_d1)
     strikes_d2 = find_digit_strikes(n_spot_open, 50, n_d2)
+
+    b_input1 = st.text_input("Buy 1", "150.0", key="nb1")
+    b_input2 = st.text_input("Buy 2", "200.0", key="nb2")
+    s_input = st.text_input("Sell", "250.0", key="nsell")
+
+    n_b1 = float(b_input1) if b_input1.replace('.', '', 1).isdigit() else 150.0
+    n_b2 = float(b_input2) if b_input2.replace('.', '', 1).isdigit() else 200.0
+    n_sell = float(s_input) if s_input.replace('.', '', 1).isdigit() else 250.0
 
     contracts = []
     for s in strikes_d1 + strikes_d2:
@@ -242,22 +235,22 @@ with tab_sensex:
             </div>
         """, unsafe_allow_html=True)
 
-    sd_col1, sd_col2 = st.columns(2)
-    with sd_col1:
-        s_d1 = st.number_input("Digit 1", 0, 9, 5, key="sd1")
-    with sd_col2:
-        s_d2 = st.number_input("Digit 2", 0, 9, 8, key="sd2")
-
-    sb_col1, sb_col2, sb_col3 = st.columns(3)
-    with sb_col1:
-        s_b1 = st.number_input("Buy 1", 1.0, 3000.0, 300.0, key="s_b1")
-    with sb_col2:
-        s_b2 = st.number_input("Buy 2", 1.0, 3000.0, 350.0, key="s_b2")
-    with sb_col3:
-        s_sell = st.number_input("Sell", 1.0, 3000.0, 450.0, key="s_sell")
+    sd_input1 = st.text_input("Digit 1", "5", key="sd1")
+    sd_input2 = st.text_input("Digit 2", "8", key="sd2")
+    
+    s_d1 = int(sd_input1) if sd_input1.isdigit() else 5
+    s_d2 = int(sd_input2) if sd_input2.isdigit() else 8
 
     s_strikes_d1 = find_digit_strikes(s_spot_open, 100, s_d1)
     s_strikes_d2 = find_digit_strikes(s_spot_open, 100, s_d2)
+
+    sb_input1 = st.text_input("Buy 1", "300.0", key="sb1")
+    sb_input2 = st.text_input("Buy 2", "350.0", key="sb2")
+    ss_input = st.text_input("Sell", "450.0", key="ssell")
+
+    s_b1 = float(sb_input1) if sb_input1.replace('.', '', 1).isdigit() else 300.0
+    s_b2 = float(sb_input2) if sb_input2.replace('.', '', 1).isdigit() else 350.0
+    s_sell = float(ss_input) if ss_input.replace('.', '', 1).isdigit() === 450.0 else 450.0
 
     s_contracts = []
     for s in s_strikes_d1 + s_strikes_d2:
