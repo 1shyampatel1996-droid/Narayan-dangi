@@ -13,37 +13,26 @@ st.set_page_config(
     layout="wide"
 )
 
-# ==================== CSS Design (Compact & Single Line Inputs) ====================
+# ==================== CSS Design (Reduced Box Height & Compact View) ====================
 st.markdown("""
     <style>
     h1 { font-size: 18px !important; }
     p, label { font-size: 11px !important; font-weight: bold !important; color: #cbd5e1 !important; }
     table { font-size: 12px !important; }
     
-    /* Force side-by-side layout for small compact inputs */
-    .input-row {
-        display: flex;
-        flex-direction: row;
-        gap: 8px;
-        width: 100%;
-        margin-bottom: 8px;
+    /* इनपुट बॉक्स की लंबाई (ऊंचाई) कम करने के लिए */
+    .stTextInput {
+        max-width: 140px !important;
+        margin-bottom: -10px !important;
     }
-    .input-group {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-    }
-    .input-group label {
-        margin-bottom: 2px;
-    }
-    .input-group input {
-        background-color: #1e293b;
-        color: white;
-        border: 1px solid #334155;
-        border-radius: 4px;
-        padding: 6px 8px;
-        font-size: 13px;
-        width: 100%;
+    .stTextInput input {
+        background-color: #1e293b !important;
+        color: white !important;
+        border: 1px solid #334155 !important;
+        border-radius: 4px !important;
+        padding: 2px 6px !important;
+        height: 30px !important;
+        font-size: 12px !important;
     }
 
     .compact-box { background-color: #1e293b; padding: 8px; border-radius: 6px; font-size: 12px; color: white; margin-bottom: 6px; text-align: center; }
@@ -101,7 +90,7 @@ def fetch_live_ltp_from_broker(exchange, symbol, token):
             pass
     return 0.0
 
-# ==================== Digital Root & 3-Digit Code ====================
+# ==================== Digital Root & 3-Digit Code (Including Decimals) ====================
 def get_digital_root(number):
     num = int(abs(number))
     while num >= 10:
@@ -111,6 +100,7 @@ def get_digital_root(number):
 def calculate_custom_digit_code(price):
     if price == 0:
         return "00"
+    # पॉइंट हटाकर आगे और पीछे के सभी अंकों को एक-एक करके जोड़ना
     price_str = str(price).replace(".", "")
     total_sum = sum(int(d) for d in price_str if d.isdigit())
     single_digit = get_digital_root(total_sum)
