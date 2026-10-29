@@ -13,12 +13,26 @@ st.set_page_config(
     layout="wide"
 )
 
-# ==================== CSS Design (Clean Layout & No Plus/Minus) ====================
+# ==================== CSS Design (Compact & Single Line Inputs) ====================
 st.markdown("""
     <style>
     h1 { font-size: 18px !important; }
-    p, label, .stTextInput label { font-size: 12px !important; font-weight: bold !important; }
+    p, label, .stTextInput label { font-size: 11px !important; font-weight: bold !important; }
     table { font-size: 12px !important; }
+    
+    /* Make input text boxes compact and side-by-side */
+    div[data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        gap: 8px !important;
+    }
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+        flex: 1 !important;
+        min-width: 0 !important;
+    }
+    .stTextInput { max-width: 100% !important; margin-bottom: -10px; }
+
     .compact-box { background-color: #1e293b; padding: 8px; border-radius: 6px; font-size: 12px; color: white; margin-bottom: 6px; text-align: center; }
     .pin-box { background-color: #064e3b; padding: 8px; border-radius: 6px; font-size: 13px; color: #34d399; font-weight: bold; margin-bottom: 6px; text-align: center; border: 1px solid #059669; }
     </style>
@@ -169,9 +183,14 @@ with tab_nifty:
     strikes_d1 = find_digit_strikes(n_spot_open, 50, n_d1)
     strikes_d2 = find_digit_strikes(n_spot_open, 50, n_d2)
 
-    b_input1 = st.text_input("Buy 1", "150.0", key="nb1")
-    b_input2 = st.text_input("Buy 2", "200.0", key="nb2")
-    s_input = st.text_input("Sell", "250.0", key="nsell")
+    # Buy 1, Buy 2, Sell in one horizontal line (3 columns)
+    b_col1, b_col2, b_col3 = st.columns(3)
+    with b_col1:
+        b_input1 = st.text_input("Buy 1", "150.0", key="nb1")
+    with b_col2:
+        b_input2 = st.text_input("Buy 2", "200.0", key="nb2")
+    with b_col3:
+        s_input = st.text_input("Sell", "250.0", key="nsell")
 
     n_b1 = float(b_input1) if b_input1.replace('.', '', 1).isdigit() else 150.0
     n_b2 = float(b_input2) if b_input2.replace('.', '', 1).isdigit() else 200.0
@@ -244,9 +263,13 @@ with tab_sensex:
     s_strikes_d1 = find_digit_strikes(s_spot_open, 100, s_d1)
     s_strikes_d2 = find_digit_strikes(s_spot_open, 100, s_d2)
 
-    sb_input1 = st.text_input("Buy 1", "300.0", key="sb1")
-    sb_input2 = st.text_input("Buy 2", "350.0", key="sb2")
-    ss_input = st.text_input("Sell", "450.0", key="ssell")
+    sb_col1, sb_col2, sb_col3 = st.columns(3)
+    with sb_col1:
+        sb_input1 = st.text_input("Buy 1", "300.0", key="sb1")
+    with sb_col2:
+        sb_input2 = st.text_input("Buy 2", "350.0", key="sb2")
+    with sb_col3:
+        ss_input = st.text_input("Sell", "450.0", key="ssell")
 
     s_b1 = float(sb_input1) if sb_input1.replace('.', '', 1).isdigit() else 300.0
     s_b2 = float(sb_input2) if sb_input2.replace('.', '', 1).isdigit() else 350.0
