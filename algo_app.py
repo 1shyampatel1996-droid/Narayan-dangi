@@ -13,14 +13,13 @@ st.set_page_config(
     layout="wide"
 )
 
-# ==================== CSS Design (Reduced Box Height & Compact View) ====================
+# ==================== CSS Design ====================
 st.markdown("""
     <style>
     h1 { font-size: 18px !important; }
     p, label { font-size: 11px !important; font-weight: bold !important; color: #cbd5e1 !important; }
     table { font-size: 12px !important; }
     
-    /* इनपुट बॉक्स की लंबाई (ऊंचाई) कम करने के लिए */
     .stTextInput {
         max-width: 140px !important;
         margin-bottom: -10px !important;
@@ -49,6 +48,12 @@ TOTP_SECRET = "2YRKKEYE2HZD562KPXZTK7PXJY"
 # ==================== Global State ====================
 if "live_ltp" not in st.session_state:
     st.session_state.live_ltp = {}
+
+if "prev_ltp" not in st.session_state:
+    st.session_state.prev_ltp = {}
+
+if "strike_open_prices" not in st.session_state:
+    st.session_state.strike_open_prices = {}
 
 if "nifty_pinned" not in st.session_state:
     st.session_state.nifty_pinned = None
@@ -90,7 +95,7 @@ def fetch_live_ltp_from_broker(exchange, symbol, token):
             pass
     return 0.0
 
-# ==================== Digital Root & 3-Digit Code (Including Decimals) ====================
+# ==================== Digital Root & 3-Digit Code ====================
 def get_digital_root(number):
     num = int(abs(number))
     while num >= 10:
@@ -100,7 +105,6 @@ def get_digital_root(number):
 def calculate_custom_digit_code(price):
     if price == 0:
         return "00"
-    # पॉइंट हटाकर आगे और पीछे के सभी अंकों को एक-एक करके जोड़ना
     price_str = str(price).replace(".", "")
     total_sum = sum(int(d) for d in price_str if d.isdigit())
     single_digit = get_digital_root(total_sum)
@@ -216,11 +220,29 @@ with tab_nifty:
             strike_name = f"{s} {opt_type}"
             ltp_val = fetch_live_ltp_from_broker("NFO", strike_name, "0")
             if ltp_val == 0.0:
-                ltp_val = st.session_state.live_ltp.get(str(s), 0.0)
-            
+                ltp_val = st.session_state.live_ltp.get(strike_name, 0.0)
+            else:
+                st.session_state.live_ltp[strike_name] = ltp_val
+
+            # Track Open Price for the strike
+            if strike_name not in st.session_state.strike_open_prices and ltp_val > 0:
+                st.session_state.strike_open_prices[strike_name] = ltp_val
+            strike_open = st.session_state.strike_open_prices.get(strike_name, ltp_val)
+
+            # Get previous LTP for direction check
+            old_ltp = st.session_state.prev_ltp.get(strike_name, ltp_val)
+            st.session_state.prev_ltp[strike_name] = ltp_val
+
             if ltp_val > 0 and st.session_state.nifty_pinned is None:
-                if abs(ltp_val - n_b1) <= 2.0 or abs(ltp_val - n_b2) <= 2.0 or abs(ltp_val - n_sell) <= 2.0:
-                    st.session_state.nifty_pinned = f"{strike_name} @ ₹{ltp_val}"
+                # Buy 1 Condition: Top to bottom approach & Open price must not be below Buy 1
+                if strike_open >= n_b1 and old_ltp >= n_b1 and ltp_val <= n_b1 and abs(ltp_val - n_b1) <= 2.0:
+                    st.session_state.nifty_pinned = f"{strike_name} @ ₹{ltp_val} (Buy 1)"
+                # Buy 2 Condition
+                elif strike_open >= n_b2 and old_ltp >= n_b2 and ltp_val <= n_b2 and abs(ltp_val - n_b2) <= 2.0:
+                    st.session_state.nifty_pinned = f"{strike_name} @ ₹{ltp_val} (Buy 2)"
+                # Sell Condition: Bottom to top approach & Open price must not be above Sell price
+                elif strike_open <= n_sell and old_ltp <= n_sell and ltp_val >= n_sell and abs(ltp_val - n_sell) <= 2.0:
+                    st.session_state.nifty_pinned = f"{strike_name} @ ₹{ltp_val} (Sell)"
 
             contracts.append({
                 "Strike": strike_name, "LTP": ltp_val, 
@@ -308,11 +330,24 @@ with tab_sensex:
             strike_name = f"{s} {opt_type}"
             ltp_val = fetch_live_ltp_from_broker("BFO", strike_name, "0")
             if ltp_val == 0.0:
-                ltp_val = st.session_state.live_ltp.get(str(s), 0.0)
+                ltp_val = st.session_state.live_ltp.get(strike_name, 0.0)
+            else:
+                st.session_state.live_ltp[strike_name] = ltp_val
+
+            if strike_name not in st.session_state.strike_open_prices and ltp_val > 0:
+                st.session_state.strike_open_prices[strike_name] = ltp_val
+            strike_open = st.session_state.strike_open_prices.get(strike_name, ltp_val)
+
+            old_ltp = st.session_state.prev_ltp.get(strike_name, ltp_val)
+            st.session_state.prev_ltp[strike_name] = ltp_val
 
             if ltp_val > 0 and st.session_state.sensex_pinned is None:
-                if abs(ltp_val - s_b1) <= 2.0 or abs(ltp_val - s_b2) <= 2.0 or abs(ltp_val - s_sell) <= 2.0:
-                    st.session_state.sensex_pinned = f"{strike_name} @ ₹{ltp_val}"
+                if strike_open >= s_b1 and old_ltp >= s_b1 and ltp_val <= s_b1 and abs(ltp_val - s_b1) <= 2.0:
+                    st.session_state.sensex_pinned = f"{strike_name} @ ₹{ltp_val} (Buy 1)"
+                elif strike_open >= s_b2 and old_ltp >= s_b2 and ltp_val <= s_b2 and abs(ltp_val - s_b2) <= 2.0:
+                    st.session_state.sensex_pinned = f"{strike_name} @ ₹{ltp_val} (Buy 2)"
+                elif strike_open <= s_sell and old_ltp <= s_sell and ltp_val >= s_sell and abs(ltp_val - s_sell) <= 2.0:
+                    st.session_state.sensex_pinned = f"{strike_name} @ ₹{ltp_val} (Sell)"
 
             s_contracts.append({
                 "Strike": strike_name, "LTP": ltp_val, 
