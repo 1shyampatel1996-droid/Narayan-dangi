@@ -13,7 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# ==================== CSS Design (No Plus/Minus & Clean Layout) ====================
+# ==================== CSS Design (Clean Layout & No Plus/Minus) ====================
 st.markdown("""
     <style>
     h1 { font-size: 18px !important; }
@@ -159,7 +159,7 @@ with tab_nifty:
             </div>
         """, unsafe_allow_html=True)
 
-    # 1. First, Strike List & Table on Top
+    # Strike Table & List on Top
     d_input1 = st.text_input("Digit 1", "3", key="nd1")
     d_input2 = st.text_input("Digit 2", "7", key="nd2")
     
@@ -250,7 +250,7 @@ with tab_sensex:
 
     s_b1 = float(sb_input1) if sb_input1.replace('.', '', 1).isdigit() else 300.0
     s_b2 = float(sb_input2) if sb_input2.replace('.', '', 1).isdigit() else 350.0
-    s_sell = float(ss_input) if ss_input.replace('.', '', 1).isdigit() === 450.0 else 450.0
+    s_sell = float(ss_input) if ss_input.replace('.', '', 1).isdigit() else 450.0
 
     s_contracts = []
     for s in s_strikes_d1 + s_strikes_d2:
