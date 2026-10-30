@@ -94,13 +94,13 @@ if manual_otp and len(manual_otp) == 6:
     if smart_api_instance:
         st.success("✅ Connected to Broker Successfully!")
 
-# ==================== Scrip Master & Token Mapping ====================
+# ==================== Robust Scrip Master & Live Token Mapping ====================
 @st.cache_resource(ttl=3600)
 def load_angel_scrip_master():
     url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
     local_file = "OpenAPIScripMaster.json"
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, timeout=15)
         if response.status_code == 200:
             data = response.json()
             with open(local_file, "w") as f:
@@ -120,16 +120,17 @@ def get_symbol_token(exchange, tradingsymbol):
     if scrip_df.empty:
         return ""
     try:
-        # Check standard columns safely
+        # Standard Angel One Master Column Matching
         for col_exch, col_sym in [('exch_seg', 'symbol'), ('exchange', 'tradingsymbol')]:
             if col_exch in scrip_df.columns and col_sym in scrip_df.columns:
-                matched = scrip_df[(scrip_df[col_exch] == exchange) & (scrip_df[col_sym] == tradingsymbol)]
+                matched = scrip_df[(scrip_df[col_exch].astype(str).str.upper() == exchange.upper()) & 
+                                   (scrip_df[col_sym].astype(str).str.upper() == tradingsymbol.upper())]
                 if not matched.empty:
                     return str(matched.iloc[0]['token'])
                 
-        # Universal fallback search across columns
+        # Fallback search across any column matching the trading symbol
         for col in scrip_df.columns:
-            sub = scrip_df[scrip_df[col].astype(str) == tradingsymbol]
+            sub = scrip_df[scrip_df[col].astype(str).str.upper() == tradingsymbol.upper()]
             if not sub.empty:
                 for _, row in sub.iterrows():
                     if 'token' in scrip_df.columns:
@@ -142,9 +143,7 @@ def fetch_live_ltp_safely(exchange, tradingsymbol):
     if smart_api_instance:
         token = get_symbol_token(exchange, tradingsymbol)
         if not token:
-            if tradingsymbol == "NIFTY": token = "99992000"
-            elif tradingsymbol == "SENSEX": token = "99990000"
-            else: return 0.0
+            return 0.0
         try:
             ltp_data = smart_api_instance.ltpData(exchange, tradingsymbol, token)
             if ltp_data and 'data' in ltp_data:
@@ -158,7 +157,7 @@ def fetch_official_broker_open(exchange, tradingsymbol):
         try:
             token_id = get_symbol_token(exchange, tradingsymbol)
             if not token_id:
-                token_id = "99992000" if tradingsymbol == "NIFTY" else "99990000"
+                return 0.0
                 
             from_date = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d 09:00")
             to_date = datetime.now().strftime("%Y-%m-%d 15:30")
@@ -183,7 +182,7 @@ def fetch_official_broker_open(exchange, tradingsymbol):
     if live_val > 0:
         return live_val
         
-    return None
+    return 0.0
 
 # ==================== Digital Root & Calculations ====================
 def get_digital_root(number):
@@ -243,10 +242,8 @@ with tab_nifty:
         exact_open = fetch_official_broker_open("NSE", "NIFTY")
         if exact_open and exact_open > 0:
             st.session_state.official_nifty_open = exact_open
-        else:
-            st.session_state.official_nifty_open = 24000.0
 
-    n_spot_open = st.session_state.official_nifty_open if st.session_state.official_nifty_open else 24000.0
+    n_spot_open = st.session_state.official_nifty_open if st.session_state.official_nifty_open else 0.0
     ns_code = calculate_custom_digit_code(n_spot_open)
 
     st.markdown(f"""
@@ -340,10 +337,8 @@ with tab_sensex:
         s_exact_open = fetch_official_broker_open("BSE", "SENSEX")
         if s_exact_open and s_exact_open > 0:
             st.session_state.official_sensex_open = s_exact_open
-        else:
-            st.session_state.official_sensex_open = 75000.0
 
-    s_spot_open = st.session_state.official_sensex_open if st.session_state.official_sensex_open else 75000.0
+    s_spot_open = st.session_state.official_sensex_open if st.session_state.official_sensex_open else 0.0
     ss_code = calculate_custom_digit_code(s_spot_open)
 
     st.markdown(f"""
