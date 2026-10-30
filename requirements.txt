@@ -1,10 +1,10 @@
-streamlit
+streamlit>=1.37,<2
+pandas>=2.2,<3
 smartapi-python
 pyotp
+requests
 logzero
 websocket-client
-urllib3
-requests
-streamlit
+pycryptodome
+tzdata
 yfinance
-pandas
