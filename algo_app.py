@@ -92,21 +92,6 @@ if manual_otp and len(manual_otp) == 6:
     if smart_api_instance:
         st.success("✅ Connected to Broker Successfully!")
 
-def fetch_exact_day_open(exchange, symbol, token):
-    if smart_api_instance:
-        try:
-            # OHLC API se direct current day ka official Open price milta hai
-            ohlc_data = smart_api_instance.ohlc({
-                "exchange": exchange,
-                "symboltoken": token,
-                "interval": "ONE_DAY"
-            })
-            if ohlc_data and 'data' in ohlc_data:
-                return float(ohlc_data['data'].get('open', 0.0))
-        except Exception as e:
-            pass
-    return 0.0
-
 def fetch_live_ltp_from_broker(exchange, symbol, token):
     if smart_api_instance:
         try:
@@ -173,12 +158,13 @@ tab_nifty, tab_sensex = st.tabs(["📊 Nifty", "📈 Sensex"])
 
 # ----------- NIFTY TAB -----------
 with tab_nifty:
-    if st.session_state.fixed_nifty_open is None and smart_api_instance is not None:
-        val = fetch_exact_day_open("NSE", "NIFTY", "26000")
-        if val > 0:
-            st.session_state.fixed_nifty_open = val
+    live_n_spot = fetch_live_ltp_from_broker("NSE", "NIFTY", "26000")
+    
+    # डे ओपन प्राइस: जैसे ही मार्केट से पहला भाव मिलेगा, वह उसे आज का पक्का ओपन मानकर लॉक कर देगा
+    if st.session_state.fixed_nifty_open is None and live_n_spot > 0:
+        st.session_state.fixed_nifty_open = live_n_spot
 
-    n_spot_open = st.session_state.fixed_nifty_open if st.session_state.fixed_nifty_open is not None else 23005.3
+    n_spot_open = st.session_state.fixed_nifty_open if st.session_state.fixed_nifty_open is not None else (live_n_spot if live_n_spot > 0 else 23000.0)
     ns_code = calculate_custom_digit_code(n_spot_open)
 
     st.markdown(f"""
@@ -234,50 +220,46 @@ with tab_nifty:
     strikes_d1 = find_digit_strikes(n_spot_open, 50, n_d1)
     strikes_d2 = find_digit_strikes(n_spot_open, 50, n_d2)
 
-    # Fast Refresh Fragment for Nifty Option Chain
-    @st.fragment(run_every=2)
-    def render_nifty_chain():
-        contracts = []
-        for s in strikes_d1 + strikes_d2:
-            for opt_type in ["CE", "PE"]:
-                trading_symbol = get_current_expiry_symbol("NIFTY", s, opt_type)
-                ltp_val = fetch_live_ltp_from_broker("NFO", trading_symbol, "0")
-                if ltp_val == 0.0:
-                    ltp_val = st.session_state.live_ltp.get(trading_symbol, 0.0)
-                else:
-                    st.session_state.live_ltp[trading_symbol] = ltp_val
+    contracts = []
+    for s in strikes_d1 + strikes_d2:
+        for opt_type in ["CE", "PE"]:
+            trading_symbol = get_current_expiry_symbol("NIFTY", s, opt_type)
+            ltp_val = fetch_live_ltp_from_broker("NFO", trading_symbol, "0")
+            if ltp_val == 0.0:
+                ltp_val = st.session_state.live_ltp.get(trading_symbol, 0.0)
+            else:
+                st.session_state.live_ltp[trading_symbol] = ltp_val
 
-                if trading_symbol not in st.session_state.strike_open_prices and ltp_val > 0:
-                    st.session_state.strike_open_prices[trading_symbol] = ltp_val
-                strike_open = st.session_state.strike_open_prices.get(trading_symbol, ltp_val)
+            if trading_symbol not in st.session_state.strike_open_prices and ltp_val > 0:
+                st.session_state.strike_open_prices[trading_symbol] = ltp_val
+            strike_open = st.session_state.strike_open_prices.get(trading_symbol, ltp_val)
 
-                old_ltp = st.session_state.prev_ltp.get(trading_symbol, ltp_val)
-                st.session_state.prev_ltp[trading_symbol] = ltp_val
+            old_ltp = st.session_state.prev_ltp.get(trading_symbol, ltp_val)
+            st.session_state.prev_ltp[trading_symbol] = ltp_val
 
-                if ltp_val > 0 and st.session_state.nifty_pinned is None:
-                    if strike_open >= n_b1 and old_ltp >= n_b1 and ltp_val <= n_b1 and abs(ltp_val - n_b1) <= 2.0:
-                        st.session_state.nifty_pinned = f"{trading_symbol} @ ₹{ltp_val} (Buy 1)"
-                    elif strike_open >= n_b2 and old_ltp >= n_b2 and ltp_val <= n_b2 and abs(ltp_val - n_b2) <= 2.0:
-                        st.session_state.nifty_pinned = f"{trading_symbol} @ ₹{ltp_val} (Buy 2)"
-                    elif strike_open <= n_sell and old_ltp <= n_sell and ltp_val >= n_sell and abs(ltp_val - n_sell) <= 2.0:
-                        st.session_state.nifty_pinned = f"{trading_symbol} @ ₹{ltp_val} (Sell)"
+            if ltp_val > 0 and st.session_state.nifty_pinned is None:
+                if strike_open >= n_b1 and old_ltp >= n_b1 and ltp_val <= n_b1 and abs(ltp_val - n_b1) <= 2.0:
+                    st.session_state.nifty_pinned = f"{trading_symbol} @ ₹{ltp_val} (Buy 1)"
+                elif strike_open >= n_b2 and old_ltp >= n_b2 and ltp_val <= n_b2 and abs(ltp_val - n_b2) <= 2.0:
+                    st.session_state.nifty_pinned = f"{trading_symbol} @ ₹{ltp_val} (Buy 2)"
+                elif strike_open <= n_sell and old_ltp <= n_sell and ltp_val >= n_sell and abs(ltp_val - n_sell) <= 2.0:
+                    st.session_state.nifty_pinned = f"{trading_symbol} @ ₹{ltp_val} (Sell)"
 
-                contracts.append({
-                    "Strike": f"{s} {opt_type}", "LTP": ltp_val, 
-                    "Buy 1": n_b1, "Buy 2": n_b2, "Sell": n_sell
-                })
-        st.table(pd.DataFrame(contracts))
-
-    render_nifty_chain()
+            contracts.append({
+                "Strike": f"{s} {opt_type}", "LTP": ltp_val, 
+                "Buy 1": n_b1, "Buy 2": n_b2, "Sell": n_sell
+            })
+    
+    st.table(pd.DataFrame(contracts))
 
 # ----------- SENSEX TAB -----------
 with tab_sensex:
-    if st.session_state.fixed_sensex_open is None and smart_api_instance is not None:
-        s_val = fetch_exact_day_open("BSE", "SENSEX", "1")
-        if s_val > 0:
-            st.session_state.fixed_sensex_open = s_val
+    live_s_spot = fetch_live_ltp_from_broker("BSE", "SENSEX", "1")
 
-    s_spot_open = st.session_state.fixed_sensex_open if st.session_state.fixed_sensex_open is not None else 73250.0
+    if st.session_state.fixed_sensex_open is None and live_s_spot > 0:
+        st.session_state.fixed_sensex_open = live_s_spot
+
+    s_spot_open = st.session_state.fixed_sensex_open if st.session_state.fixed_sensex_open is not None else (live_s_spot if live_s_spot > 0 else 73000.0)
     ss_code = calculate_custom_digit_code(s_spot_open)
 
     st.markdown(f"""
@@ -333,38 +315,38 @@ with tab_sensex:
     s_strikes_d1 = find_digit_strikes(s_spot_open, 100, s_d1)
     s_strikes_d2 = find_digit_strikes(s_spot_open, 100, s_d2)
 
-    # Fast Refresh Fragment for Sensex Option Chain
-    @st.fragment(run_every=2)
-    def render_sensex_chain():
-        s_contracts = []
-        for s in s_strikes_d1 + s_strikes_d2:
-            for opt_type in ["CE", "PE"]:
-                trading_symbol = get_current_expiry_symbol("SENSEX", s, opt_type)
-                ltp_val = fetch_live_ltp_from_broker("BFO", trading_symbol, "0")
-                if ltp_val == 0.0:
-                    ltp_val = st.session_state.live_ltp.get(trading_symbol, 0.0)
-                else:
-                    st.session_state.live_ltp[trading_symbol] = ltp_val
+    s_contracts = []
+    for s in s_strikes_d1 + s_strikes_d2:
+        for opt_type in ["CE", "PE"]:
+            trading_symbol = get_current_expiry_symbol("SENSEX", s, opt_type)
+            ltp_val = fetch_live_ltp_from_broker("BFO", trading_symbol, "0")
+            if ltp_val == 0.0:
+                ltp_val = st.session_state.live_ltp.get(trading_symbol, 0.0)
+            else:
+                st.session_state.live_ltp[trading_symbol] = ltp_val
 
-                if trading_symbol not in st.session_state.strike_open_prices and ltp_val > 0:
-                    st.session_state.strike_open_prices[trading_symbol] = ltp_val
-                strike_open = st.session_state.strike_open_prices.get(trading_symbol, ltp_val)
+            if trading_symbol not in st.session_state.strike_open_prices and ltp_val > 0:
+                st.session_state.strike_open_prices[trading_symbol] = ltp_val
+            strike_open = st.session_state.strike_open_prices.get(trading_symbol, ltp_val)
 
-                old_ltp = st.session_state.prev_ltp.get(trading_symbol, ltp_val)
-                st.session_state.prev_ltp[trading_symbol] = ltp_val
+            old_ltp = st.session_state.prev_ltp.get(trading_symbol, ltp_val)
+            st.session_state.prev_ltp[trading_symbol] = ltp_val
 
-                if ltp_val > 0 and st.session_state.sensex_pinned is None:
-                    if strike_open >= s_b1 and old_ltp >= s_b1 and ltp_val <= s_b1 and abs(ltp_val - s_b1) <= 2.0:
-                        st.session_state.sensex_pinned = f"{trading_symbol} @ ₹{ltp_val} (Buy 1)"
-                    elif strike_open >= s_b2 and old_ltp >= s_b2 and ltp_val <= s_b2 and abs(ltp_val - s_b2) <= 2.0:
-                        st.session_state.sensex_pinned = f"{trading_symbol} @ ₹{ltp_val} (Buy 2)"
-                    elif strike_open <= s_sell and old_ltp <= s_sell and ltp_val >= s_sell and abs(ltp_val - s_sell) <= 2.0:
-                        st.session_state.sensex_pinned = f"{trading_symbol} @ ₹{ltp_val} (Sell)"
+            if ltp_val > 0 and st.session_state.sensex_pinned is None:
+                if strike_open >= s_b1 and old_ltp >= s_b1 and ltp_val <= s_b1 and abs(ltp_val - s_b1) <= 2.0:
+                    st.session_state.sensex_pinned = f"{trading_symbol} @ ₹{ltp_val} (Buy 1)"
+                elif strike_open >= s_b2 and old_ltp >= s_b2 and ltp_val <= s_b2 and abs(ltp_val - s_b2) <= 2.0:
+                    st.session_state.sensex_pinned = f"{trading_symbol} @ ₹{ltp_val} (Buy 2)"
+                elif strike_open <= s_sell and old_ltp <= s_sell and ltp_val >= s_sell and abs(ltp_val - s_sell) <= 2.0:
+                    st.session_state.sensex_pinned = f"{trading_symbol} @ ₹{ltp_val} (Sell)"
 
-                s_contracts.append({
-                    "Strike": f"{s} {opt_type}", "LTP": ltp_val, 
-                    "Buy 1": s_b1, "Buy 2": s_b2, "Sell": s_sell
-                })
-        st.table(pd.DataFrame(s_contracts))
+            s_contracts.append({
+                "Strike": f"{s} {opt_type}", "LTP": ltp_val, 
+                "Buy 1": s_b1, "Buy 2": s_b2, "Sell": s_sell
+            })
+    
+    st.table(pd.DataFrame(s_contracts))
 
-    render_sensex_chain()
+# ==================== High-Speed Live Refresh Loop ====================
+time.sleep(3)
+st.rerun()
