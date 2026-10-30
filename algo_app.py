@@ -3,7 +3,7 @@ import pandas as pd
 import requests
 import pyotp
 import time
-from datetime import datetime
+from datetime import datetime, date
 from SmartApi import SmartConnect
 
 # ==================== Page Setup & Icon ====================
@@ -60,13 +60,13 @@ if "nifty_pinned" not in st.session_state:
 if "sensex_pinned" not in st.session_state:
     st.session_state.sensex_pinned = None
 
-if "nifty_day_locked" not in st.session_state:
-    st.session_state.nifty_day_locked = False
-    st.session_state.nifty_s_open = 0.0
-
-if "sensex_day_locked" not in st.session_state:
-    st.session_state.sensex_day_locked = False
-    st.session_state.sensex_s_open = 0.0
+# दिन का ओपन प्राइस सेव करने के लिए स्टेट (ताकि बार-बार न बदले)
+today_date = str(date.today())
+if "last_date" not in st.session_state or st.session_state.last_date != today_date:
+    st.session_state.last_date = today_date
+    st.session_state.nifty_day_open_val = None
+    st.session_state.sensex_day_open_val = None
+    st.session_state.strike_open_prices = {}
 
 # ==================== STREAMLIT UI & MANUAL OTP LOGIN ====================
 st.title("⚡ Algo Strike Scanner")
@@ -150,22 +150,18 @@ tab_nifty, tab_sensex = st.tabs(["📊 Nifty", "📈 Sensex"])
 with tab_nifty:
     now_time = datetime.now().time()
     
-    # Nifty Spot correct token "26000" ke sath
     live_n_spot = fetch_live_ltp_from_broker("NSE", "NIFTY", "26000")
     
-    if not st.session_state.nifty_day_locked:
-        if live_n_spot > 0:
-            st.session_state.nifty_s_open = live_n_spot
-        if now_time.hour > 9 or (now_time.hour == 9 and now_time.minute >= 12):
-            if st.session_state.nifty_s_open > 0:
-                st.session_state.nifty_day_locked = True
+    # दिन का ओपन प्राइस सिर्फ एक बार लॉक होगा
+    if st.session_state.nifty_day_open_val is None and live_n_spot > 0:
+        st.session_state.nifty_day_open_val = live_n_spot
 
-    n_spot_open = st.session_state.nifty_s_open if st.session_state.nifty_s_open > 0 else (live_n_spot if live_n_spot > 0 else 24000.0)
+    n_spot_open = st.session_state.nifty_day_open_val if st.session_state.nifty_day_open_val is not None else (live_n_spot if live_n_spot > 0 else 24000.0)
     ns_code = calculate_custom_digit_code(n_spot_open)
 
     st.markdown(f"""
         <div class="compact-box">
-            <b>Nifty Spot (S):</b> {n_spot_open} &nbsp;|&nbsp; Code: <b>{ns_code}</b>
+            <b>Nifty Spot (Day Open):</b> {n_spot_open} &nbsp;|&nbsp; Code: <b>{ns_code}</b>
         </div>
     """, unsafe_allow_html=True)
 
@@ -220,6 +216,8 @@ with tab_nifty:
     for s in strikes_d1 + strikes_d2:
         for opt_type in ["CE", "PE"]:
             strike_name = f"{s} {opt_type}"
+            # Option ke liye proper format (jaise NIFTY current expiry trading symbol) zaroori hota hai
+            # Filहाल लाइव स्कैनिंग के लिए इसे एनएफओ एक्सचेंज पर भेजा जा रहा है
             ltp_val = fetch_live_ltp_from_broker("NFO", strike_name, "0")
             if ltp_val == 0.0:
                 ltp_val = st.session_state.live_ltp.get(strike_name, 0.0)
@@ -250,22 +248,17 @@ with tab_nifty:
 
 # ----------- SENSEX TAB -----------
 with tab_sensex:
-    # Sensex Spot correct token "1" ke sath
     live_s_spot = fetch_live_ltp_from_broker("BSE", "SENSEX", "1")
 
-    if not st.session_state.sensex_day_locked:
-        if live_s_spot > 0:
-            st.session_state.sensex_s_open = live_s_spot
-        if now_time.hour > 9 or (now_time.hour == 9 and now_time.minute >= 12):
-            if st.session_state.sensex_s_open > 0:
-                st.session_state.sensex_day_locked = True
+    if st.session_state.sensex_day_open_val is None and live_s_spot > 0:
+        st.session_state.sensex_day_open_val = live_s_spot
 
-    s_spot_open = st.session_state.sensex_s_open if st.session_state.sensex_s_open > 0 else (live_s_spot if live_s_spot > 0 else 73250.0)
+    s_spot_open = st.session_state.sensex_day_open_val if st.session_state.sensex_day_open_val is not None else (live_s_spot if live_s_spot > 0 else 73250.0)
     ss_code = calculate_custom_digit_code(s_spot_open)
 
     st.markdown(f"""
         <div class="compact-box">
-            <b>Sensex Spot (S):</b> {s_spot_open} &nbsp;|&nbsp; Code: <b>{ss_code}</b>
+            <b>Sensex Spot (Day Open):</b> {s_spot_open} &nbsp;|&nbsp; Code: <b>{ss_code}</b>
         </div>
     """, unsafe_allow_html=True)
 
