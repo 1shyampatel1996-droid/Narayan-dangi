@@ -93,39 +93,26 @@ if manual_otp and len(manual_otp) == 6:
     if smart_api_instance:
         st.success("✅ Connected to Broker Successfully!")
 
-# ==================== Official Website Scraper/API for Day Open ====================
-def fetch_nse_nifty_day_open():
-    try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        session = requests.Session()
-        session.get("https://www.nseindia.com", headers=headers, timeout=5)
-        res = session.get("https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%2050", headers=headers, timeout=5)
-        if res.status_code == 200:
-            data = res.json()
-            if 'data' in data and len(data['data']) > 0:
-                # Nifty 50 index data se open price nikalना
-                for item in data['data']:
-                    if item.get('symbol') == 'NIFTY 50':
-                        return float(item.get('open', 0.0))
-        # Fallback to general data structure if available
-        for item in data.get('data', []):
-            if 'open' in item:
-                return float(item['open'])
-    except Exception as e:
-        pass
-    return 0.0
-
-def fetch_bse_sensex_day_open():
-    try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        url = "https://api.bseindia.com/BseIndiaAPI/api/sensex/w"
-        res = requests.get(url, headers=headers, timeout=5)
-        if res.status_code == 200:
-            data = res.json()
-            if 'Open' in data:
-                return float(str(data['Open']).replace(',', ''))
-    except Exception as e:
-        pass
+# ==================== Official Broker Quote for Exact Day Open ====================
+def fetch_official_broker_open(exchange, token):
+    if smart_api_instance:
+        try:
+            # SmartAPI ka official candle/quote data jo bilkul exact day open deta hai
+            from_date = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d 09:00")
+            to_date = datetime.now().strftime("%Y-%m-%d 15:30")
+            params = {
+                "exchange": exchange,
+                "symboltoken": token,
+                "interval": "ONE_DAY",
+                "fromdate": from_date,
+                "todate": to_date
+            }
+            candledata = smart_api_instance.getCandleData(params)
+            if candledata and 'data' in candledata and candledata['data']:
+                latest_candle = candledata['data'][-1]
+                return float(latest_candle[1]) # Exact Day Open Price
+        except Exception as e:
+            pass
     return 0.0
 
 def fetch_live_ltp_from_broker(exchange, symbol, token):
@@ -194,22 +181,21 @@ tab_nifty, tab_sensex = st.tabs(["📊 Nifty", "📈 Sensex"])
 
 # ----------- NIFTY TAB -----------
 with tab_nifty:
-    if st.session_state.official_nifty_open is None:
-        nse_open = fetch_nse_nifty_day_open()
-        if nse_open > 0:
-            st.session_state.official_nifty_open = nse_open
+    if st.session_state.official_nifty_open is None and smart_api_instance is not None:
+        exact_open = fetch_official_broker_open("NSE", "26000")
+        if exact_open > 0:
+            st.session_state.official_nifty_open = exact_open
         else:
-            # Fallback to broker spot if official site is restricted
-            live_spot = fetch_live_ltp_from_broker("NSE", "NIFTY", "26000")
-            if live_spot > 0:
-                st.session_state.official_nifty_open = live_spot
+            live_s = fetch_live_ltp_from_broker("NSE", "NIFTY", "26000")
+            if live_s > 0:
+                st.session_state.official_nifty_open = live_s
 
     n_spot_open = st.session_state.official_nifty_open if st.session_state.official_nifty_open is not None else 23000.0
     ns_code = calculate_custom_digit_code(n_spot_open)
 
     st.markdown(f"""
         <div class="compact-box">
-            <b>Nifty Official Day Open (NSE):</b> {n_spot_open} &nbsp;|&nbsp; Code: <b>{ns_code}</b>
+            <b>Nifty Official Day Open:</b> {n_spot_open} &nbsp;|&nbsp; Code: <b>{ns_code}</b>
         </div>
     """, unsafe_allow_html=True)
 
@@ -294,21 +280,21 @@ with tab_nifty:
 
 # ----------- SENSEX TAB -----------
 with tab_sensex:
-    if st.session_state.official_sensex_open is None:
-        bse_open = fetch_bse_sensex_day_open()
-        if bse_open > 0:
-            st.session_state.official_sensex_open = bse_open
+    if st.session_state.official_sensex_open is None and smart_api_instance is not None:
+        s_exact_open = fetch_official_broker_open("BSE", "1")
+        if s_exact_open > 0:
+            st.session_state.official_sensex_open = s_exact_open
         else:
-            s_live_spot = fetch_live_ltp_from_broker("BSE", "SENSEX", "1")
-            if s_live_spot > 0:
-                st.session_state.official_sensex_open = s_live_spot
+            s_live_s = fetch_live_ltp_from_broker("BSE", "SENSEX", "1")
+            if s_live_s > 0:
+                st.session_state.official_sensex_open = s_live_s
 
     s_spot_open = st.session_state.official_sensex_open if st.session_state.official_sensex_open is not None else 73000.0
     ss_code = calculate_custom_digit_code(s_spot_open)
 
     st.markdown(f"""
         <div class="compact-box">
-            <b>Sensex Official Day Open (BSE):</b> {s_spot_open} &nbsp;|&nbsp; Code: <b>{ss_code}</b>
+            <b>Sensex Official Day Open:</b> {s_spot_open} &nbsp;|&nbsp; Code: <b>{ss_code}</b>
         </div>
     """, unsafe_allow_html=True)
 
@@ -389,4 +375,8 @@ with tab_sensex:
                 "Buy 1": s_b1, "Buy 2": s_b2, "Sell": s_sell
             })
     
-    st
+    st.table(pd.DataFrame(s_contracts))
+
+# ==================== High-Speed Live Refresh Loop ====================
+time.sleep(2)
+st.rerun()
