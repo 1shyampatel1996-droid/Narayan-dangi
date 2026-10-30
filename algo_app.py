@@ -1,12 +1,14 @@
-import streamlit as st
-import pandas as pd
-import requests
-import pyotp
+import os
 import time
+import json
+import pyotp
+import requests
+import pandas as pd
 from datetime import datetime, date, timedelta
 from SmartApi import SmartConnect
 
 # ==================== Page Setup & Icon ====================
+st = __import__('streamlit')
 st.set_page_config(
     page_title="Algo Strike Scanner", 
     page_icon="🎯", 
@@ -39,7 +41,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ==================== API Details ====================
+# ==================== API Details (Your Original Credentials) ====================
 API_KEY = "GAuh625s"
 CLIENT_CODE = "N417637"
 PASSWORD = "1003"
@@ -93,16 +95,61 @@ if manual_otp and len(manual_otp) == 6:
     if smart_api_instance:
         st.success("✅ Connected to Broker Successfully!")
 
-# ==================== Official Broker Quote for Exact Day Open ====================
-def fetch_official_broker_open(exchange, token):
+# ==================== Scrip Master & Token Mapping ====================
+@st.cache_resource(ttl=3600)
+def load_angel_scrip_master():
+    url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
+    local_file = "OpenAPIScripMaster.json"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            with open(local_file, "w") as f:
+                json.dump(data, f)
+            return pd.DataFrame(data)
+    except Exception as e:
+        pass
+    
+    if os.path.exists(local_file):
+        with open(local_file, "r") as f:
+            return pd.DataFrame(json.load(f))
+    return pd.DataFrame()
+
+scrip_df = load_angel_scrip_master()
+
+def get_symbol_token(exchange, tradingsymbol):
+    if scrip_df.empty:
+        return ""
+    matched = scrip_df[(scrip_df['exch_seg'] == exchange) & (scrip_df['symbol'] == tradingsymbol)]
+    if not matched.empty:
+        return str(matched.iloc[0]['token'])
+    
+    matched_alt = scrip_df[(scrip_df['exchange'] == exchange) & (scrip_df['tradingsymbol'] == tradingsymbol)]
+    if not matched_alt.empty:
+        return str(matched_alt.iloc[0]['token'])
+    return ""
+
+def fetch_live_ltp_safely(exchange, tradingsymbol):
+    if smart_api_instance:
+        token = get_symbol_token(exchange, tradingsymbol)
+        if not token:
+            return 0.0
+        try:
+            ltp_data = smart_api_instance.ltpData(exchange, tradingsymbol, token)
+            if ltp_data and 'data' in ltp_data:
+                return float(ltp_data['data'].get('ltp', 0.0))
+        except Exception as e:
+            pass
+    return 0.0
+
+def fetch_official_broker_open(exchange, token_id):
     if smart_api_instance:
         try:
-            # SmartAPI ka official candle/quote data jo bilkul exact day open deta hai
             from_date = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d 09:00")
             to_date = datetime.now().strftime("%Y-%m-%d 15:30")
             params = {
                 "exchange": exchange,
-                "symboltoken": token,
+                "symboltoken": token_id,
                 "interval": "ONE_DAY",
                 "fromdate": from_date,
                 "todate": to_date
@@ -111,16 +158,6 @@ def fetch_official_broker_open(exchange, token):
             if candledata and 'data' in candledata and candledata['data']:
                 latest_candle = candledata['data'][-1]
                 return float(latest_candle[1]) # Exact Day Open Price
-        except Exception as e:
-            pass
-    return 0.0
-
-def fetch_live_ltp_from_broker(exchange, symbol, token):
-    if smart_api_instance:
-        try:
-            ltp_data = smart_api_instance.ltpData(exchange, symbol, token)
-            if ltp_data and 'data' in ltp_data:
-                return float(ltp_data['data'].get('ltp', 0.0))
         except Exception as e:
             pass
     return 0.0
@@ -186,7 +223,7 @@ with tab_nifty:
         if exact_open > 0:
             st.session_state.official_nifty_open = exact_open
         else:
-            live_s = fetch_live_ltp_from_broker("NSE", "NIFTY", "26000")
+            live_s = fetch_live_ltp_safely("NSE", "NIFTY")
             if live_s > 0:
                 st.session_state.official_nifty_open = live_s
 
@@ -250,7 +287,7 @@ with tab_nifty:
     for s in strikes_d1 + strikes_d2:
         for opt_type in ["CE", "PE"]:
             trading_symbol = get_current_expiry_symbol("NIFTY", s, opt_type)
-            ltp_val = fetch_live_ltp_from_broker("NFO", trading_symbol, "")
+            ltp_val = fetch_live_ltp_safely("NFO", trading_symbol)
             if ltp_val == 0.0:
                 ltp_val = st.session_state.live_ltp.get(trading_symbol, 0.0)
             else:
@@ -285,7 +322,7 @@ with tab_sensex:
         if s_exact_open > 0:
             st.session_state.official_sensex_open = s_exact_open
         else:
-            s_live_s = fetch_live_ltp_from_broker("BSE", "SENSEX", "1")
+            s_live_s = fetch_live_ltp_safely("BSE", "SENSEX")
             if s_live_s > 0:
                 st.session_state.official_sensex_open = s_live_s
 
@@ -349,7 +386,7 @@ with tab_sensex:
     for s in s_strikes_d1 + s_strikes_d2:
         for opt_type in ["CE", "PE"]:
             trading_symbol = get_current_expiry_symbol("SENSEX", s, opt_type)
-            ltp_val = fetch_live_ltp_from_broker("BFO", trading_symbol, "")
+            ltp_val = fetch_live_ltp_safely("BFO", trading_symbol)
             if ltp_val == 0.0:
                 ltp_val = st.session_state.live_ltp.get(trading_symbol, 0.0)
             else:
