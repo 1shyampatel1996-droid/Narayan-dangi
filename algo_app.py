@@ -120,16 +120,14 @@ def get_symbol_token(exchange, tradingsymbol):
     if scrip_df.empty:
         return ""
     try:
-        if 'exch_seg' in scrip_df.columns and 'symbol' in scrip_df.columns:
-            matched = scrip_df[(scrip_df['exch_seg'] == exchange) & (scrip_df['symbol'] == tradingsymbol)]
-            if not matched.empty:
-                return str(matched.iloc[0]['token'])
+        # Check standard columns safely
+        for col_exch, col_sym in [('exch_seg', 'symbol'), ('exchange', 'tradingsymbol')]:
+            if col_exch in scrip_df.columns and col_sym in scrip_df.columns:
+                matched = scrip_df[(scrip_df[col_exch] == exchange) & (scrip_df[col_sym] == tradingsymbol)]
+                if not matched.empty:
+                    return str(matched.iloc[0]['token'])
                 
-        if 'exchange' in scrip_df.columns and 'tradingsymbol' in scrip_df.columns:
-            matched_alt = scrip_df[(scrip_df['exchange'] == exchange) & (scrip_df['tradingsymbol'] == tradingsymbol)]
-            if not matched_alt.empty:
-                return str(matched_alt.iloc[0]['token'])
-                
+        # Universal fallback search across columns
         for col in scrip_df.columns:
             sub = scrip_df[scrip_df[col].astype(str) == tradingsymbol]
             if not sub.empty:
@@ -174,20 +172,31 @@ def fetch_official_broker_open(exchange, tradingsymbol):
             candledata = smart_api_instance.getCandleData(params)
             if candledata and 'data' in candledata and candledata['data']:
                 latest_candle = candledata['data'][-1]
-                return float(latest_candle[1]) # Exact Day Open Price
+                val = float(latest_candle[1])
+                if val > 0:
+                    return val
         except Exception as e:
             pass
-    return fetch_live_ltp_safely(exchange, tradingsymbol)
+            
+    # Fallback to Live LTP if candle fails
+    live_val = fetch_live_ltp_safely(exchange, tradingsymbol)
+    if live_val > 0:
+        return live_val
+        
+    return None
 
 # ==================== Digital Root & Calculations ====================
 def get_digital_root(number):
-    num = int(abs(number))
+    try:
+        num = int(abs(float(number)))
+    except:
+        return 0
     while num >= 10:
         num = sum(int(digit) for digit in str(num))
     return num
 
 def calculate_custom_digit_code(price):
-    if price == 0:
+    if not price or price == 0:
         return "00"
     price_str = str(price).replace(".", "")
     total_sum = sum(int(d) for d in price_str if d.isdigit())
@@ -195,7 +204,7 @@ def calculate_custom_digit_code(price):
     return f"{total_sum}{single_digit}"
 
 def find_digit_strikes(current_spot, step, target_digit):
-    if current_spot == 0:
+    if not current_spot or current_spot == 0:
         current_spot = 24000.0
     base_strike = round(current_spot / step) * step
     matched_strikes = []
@@ -224,11 +233,7 @@ def get_current_expiry_symbol(index_name, strike, opt_type):
     expiry_date = now + timedelta(days=days_to_thu)
     exp_str = expiry_date.strftime("%d%b%y").upper()
     
-    if index_name == "NIFTY":
-        return f"NIFTY{exp_str}{int(strike)}{opt_type}"
-    elif index_name == "SENSEX":
-        return f"SENSEX{exp_str}{int(strike)}{opt_type}"
-    return f"{index_name}{int(strike)}{opt_type}"
+    return f"{index_name}{exp_str}{int(strike)}{opt_type}"
 
 tab_nifty, tab_sensex = st.tabs(["📊 Nifty", "📈 Sensex"])
 
@@ -236,12 +241,12 @@ tab_nifty, tab_sensex = st.tabs(["📊 Nifty", "📈 Sensex"])
 with tab_nifty:
     if st.session_state.official_nifty_open is None and smart_api_instance is not None:
         exact_open = fetch_official_broker_open("NSE", "NIFTY")
-        if exact_open > 0:
+        if exact_open and exact_open > 0:
             st.session_state.official_nifty_open = exact_open
         else:
             st.session_state.official_nifty_open = 24000.0
 
-    n_spot_open = st.session_state.official_nifty_open
+    n_spot_open = st.session_state.official_nifty_open if st.session_state.official_nifty_open else 24000.0
     ns_code = calculate_custom_digit_code(n_spot_open)
 
     st.markdown(f"""
@@ -333,12 +338,12 @@ with tab_nifty:
 with tab_sensex:
     if st.session_state.official_sensex_open is None and smart_api_instance is not None:
         s_exact_open = fetch_official_broker_open("BSE", "SENSEX")
-        if s_exact_open > 0:
+        if s_exact_open and s_exact_open > 0:
             st.session_state.official_sensex_open = s_exact_open
         else:
             st.session_state.official_sensex_open = 75000.0
 
-    s_spot_open = st.session_state.official_sensex_open
+    s_spot_open = st.session_state.official_sensex_open if st.session_state.official_sensex_open else 75000.0
     ss_code = calculate_custom_digit_code(s_spot_open)
 
     st.markdown(f"""
