@@ -63,17 +63,14 @@ if "sensex_pinned" not in st.session_state:
 if "nifty_day_locked" not in st.session_state:
     st.session_state.nifty_day_locked = False
     st.session_state.nifty_s_open = 0.0
-    st.session_state.nifty_f_open = 0.0
 
 if "sensex_day_locked" not in st.session_state:
     st.session_state.sensex_day_locked = False
     st.session_state.sensex_s_open = 0.0
-    st.session_state.sensex_f_open = 0.0
 
 # ==================== STREAMLIT UI & MANUAL OTP LOGIN ====================
 st.title("⚡ Algo Strike Scanner")
 
-# ऐप के ऊपर ही मैनुअल OTP डालने के लिए बॉक्स
 st.markdown("### 🔐 Broker Authentication (OTP Login)")
 manual_otp = st.text_input("Google Authenticator OTP (6 Digits)", type="password", key="manual_otp_input")
 
@@ -92,7 +89,6 @@ def get_smart_connect_session_with_otp(otp_code):
         st.error(f"Connection Exception: {e}")
     return None
 
-# अगर OTP डाला गया है, तभी सेशन कनेक्ट होगा
 smart_api_instance = None
 if manual_otp and len(manual_otp) == 6:
     smart_api_instance = get_smart_connect_session_with_otp(manual_otp)
@@ -154,27 +150,22 @@ tab_nifty, tab_sensex = st.tabs(["📊 Nifty", "📈 Sensex"])
 with tab_nifty:
     now_time = datetime.now().time()
     
+    # केवल स्पॉट डेटा लिया जा रहा है
     live_n_spot = fetch_live_ltp_from_broker("NSE", "NIFTY", "999920000")
-    live_n_fut = fetch_live_ltp_from_broker("NFO", "NIFTY26MARFUT", "0")
     
     if not st.session_state.nifty_day_locked:
         if live_n_spot > 0:
             st.session_state.nifty_s_open = live_n_spot
-        if live_n_fut > 0:
-            st.session_state.nifty_f_open = live_n_fut
         if now_time.hour > 9 or (now_time.hour == 9 and now_time.minute >= 12):
             if st.session_state.nifty_s_open > 0:
                 st.session_state.nifty_day_locked = True
 
     n_spot_open = st.session_state.nifty_s_open if st.session_state.nifty_s_open > 0 else (live_n_spot if live_n_spot > 0 else 24000.0)
-    n_fut_open = st.session_state.nifty_f_open if st.session_state.nifty_f_open > 0 else (live_n_fut if live_n_fut > 0 else 24025.0)
-
     ns_code = calculate_custom_digit_code(n_spot_open)
-    nf_code = calculate_custom_digit_code(n_fut_open)
 
     st.markdown(f"""
         <div class="compact-box">
-            <b>S:</b> {n_spot_open} (Code: <b>{ns_code}</b>) &nbsp;&nbsp;|&nbsp;&nbsp; <b>F:</b> {n_fut_open} (Code: <b>{nf_code}</b>)
+            <b>Nifty Spot (S):</b> {n_spot_open} &nbsp;|&nbsp; Code: <b>{ns_code}</b>
         </div>
     """, unsafe_allow_html=True)
 
@@ -260,26 +251,20 @@ with tab_nifty:
 # ----------- SENSEX TAB -----------
 with tab_sensex:
     live_s_spot = fetch_live_ltp_from_broker("BSE", "SENSEX", "999919000")
-    live_s_fut = fetch_live_ltp_from_broker("BFO", "SENSEXFUT", "0")
 
     if not st.session_state.sensex_day_locked:
         if live_s_spot > 0:
             st.session_state.sensex_s_open = live_s_spot
-        if live_s_fut > 0:
-            st.session_state.sensex_f_open = live_s_fut
         if now_time.hour > 9 or (now_time.hour == 9 and now_time.minute >= 12):
             if st.session_state.sensex_s_open > 0:
                 st.session_state.sensex_day_locked = True
 
     s_spot_open = st.session_state.sensex_s_open if st.session_state.sensex_s_open > 0 else (live_s_spot if live_s_spot > 0 else 73250.0)
-    s_fut_open = st.session_state.sensex_f_open if st.session_state.sensex_f_open > 0 else (live_s_fut if live_s_fut > 0 else 73300.0)
-
     ss_code = calculate_custom_digit_code(s_spot_open)
-    sf_code = calculate_custom_digit_code(s_fut_open)
 
     st.markdown(f"""
         <div class="compact-box">
-            <b>S:</b> {s_spot_open} (Code: <b>{ss_code}</b>) &nbsp;&nbsp;|&nbsp;&nbsp; <b>F:</b> {s_fut_open} (Code: <b>{sf_code}</b>)
+            <b>Sensex Spot (S):</b> {s_spot_open} &nbsp;|&nbsp; Code: <b>{ss_code}</b>
         </div>
     """, unsafe_allow_html=True)
 
