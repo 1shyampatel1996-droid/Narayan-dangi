@@ -1,7 +1,6 @@
 import os
 import time
 import json
-import pyotp
 import requests
 import pandas as pd
 from datetime import datetime, date, timedelta
@@ -41,7 +40,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ==================== API Details (Your Original Credentials) ====================
+# ==================== API Details ====================
 API_KEY = "GAuh625s"
 CLIENT_CODE = "N417637"
 PASSWORD = "1003"
@@ -120,20 +119,34 @@ scrip_df = load_angel_scrip_master()
 def get_symbol_token(exchange, tradingsymbol):
     if scrip_df.empty:
         return ""
-    matched = scrip_df[(scrip_df['exch_seg'] == exchange) & (scrip_df['symbol'] == tradingsymbol)]
-    if not matched.empty:
-        return str(matched.iloc[0]['token'])
-    
-    matched_alt = scrip_df[(scrip_df['exchange'] == exchange) & (scrip_df['tradingsymbol'] == tradingsymbol)]
-    if not matched_alt.empty:
-        return str(matched_alt.iloc[0]['token'])
+    try:
+        if 'exch_seg' in scrip_df.columns and 'symbol' in scrip_df.columns:
+            matched = scrip_df[(scrip_df['exch_seg'] == exchange) & (scrip_df['symbol'] == tradingsymbol)]
+            if not matched.empty:
+                return str(matched.iloc[0]['token'])
+                
+        if 'exchange' in scrip_df.columns and 'tradingsymbol' in scrip_df.columns:
+            matched_alt = scrip_df[(scrip_df['exchange'] == exchange) & (scrip_df['tradingsymbol'] == tradingsymbol)]
+            if not matched_alt.empty:
+                return str(matched_alt.iloc[0]['token'])
+                
+        for col in scrip_df.columns:
+            sub = scrip_df[scrip_df[col].astype(str) == tradingsymbol]
+            if not sub.empty:
+                for _, row in sub.iterrows():
+                    if 'token' in scrip_df.columns:
+                        return str(row['token'])
+    except Exception as e:
+        pass
     return ""
 
 def fetch_live_ltp_safely(exchange, tradingsymbol):
     if smart_api_instance:
         token = get_symbol_token(exchange, tradingsymbol)
         if not token:
-            return 0.0
+            if tradingsymbol == "NIFTY": token = "99992000"
+            elif tradingsymbol == "SENSEX": token = "99990000"
+            else: return 0.0
         try:
             ltp_data = smart_api_instance.ltpData(exchange, tradingsymbol, token)
             if ltp_data and 'data' in ltp_data:
@@ -142,9 +155,13 @@ def fetch_live_ltp_safely(exchange, tradingsymbol):
             pass
     return 0.0
 
-def fetch_official_broker_open(exchange, token_id):
+def fetch_official_broker_open(exchange, tradingsymbol):
     if smart_api_instance:
         try:
+            token_id = get_symbol_token(exchange, tradingsymbol)
+            if not token_id:
+                token_id = "99992000" if tradingsymbol == "NIFTY" else "99990000"
+                
             from_date = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d 09:00")
             to_date = datetime.now().strftime("%Y-%m-%d 15:30")
             params = {
@@ -160,9 +177,9 @@ def fetch_official_broker_open(exchange, token_id):
                 return float(latest_candle[1]) # Exact Day Open Price
         except Exception as e:
             pass
-    return 0.0
+    return fetch_live_ltp_safely(exchange, tradingsymbol)
 
-# ==================== Digital Root & 3-Digit Code ====================
+# ==================== Digital Root & Calculations ====================
 def get_digital_root(number):
     num = int(abs(number))
     while num >= 10:
@@ -175,8 +192,7 @@ def calculate_custom_digit_code(price):
     price_str = str(price).replace(".", "")
     total_sum = sum(int(d) for d in price_str if d.isdigit())
     single_digit = get_digital_root(total_sum)
-    code_3digit = f"{total_sum}{single_digit}"
-    return code_3digit
+    return f"{total_sum}{single_digit}"
 
 def find_digit_strikes(current_spot, step, target_digit):
     if current_spot == 0:
@@ -219,15 +235,13 @@ tab_nifty, tab_sensex = st.tabs(["📊 Nifty", "📈 Sensex"])
 # ----------- NIFTY TAB -----------
 with tab_nifty:
     if st.session_state.official_nifty_open is None and smart_api_instance is not None:
-        exact_open = fetch_official_broker_open("NSE", "26000")
+        exact_open = fetch_official_broker_open("NSE", "NIFTY")
         if exact_open > 0:
             st.session_state.official_nifty_open = exact_open
         else:
-            live_s = fetch_live_ltp_safely("NSE", "NIFTY")
-            if live_s > 0:
-                st.session_state.official_nifty_open = live_s
+            st.session_state.official_nifty_open = 24000.0
 
-    n_spot_open = st.session_state.official_nifty_open if st.session_state.official_nifty_open is not None else 23000.0
+    n_spot_open = st.session_state.official_nifty_open
     ns_code = calculate_custom_digit_code(n_spot_open)
 
     st.markdown(f"""
@@ -318,15 +332,13 @@ with tab_nifty:
 # ----------- SENSEX TAB -----------
 with tab_sensex:
     if st.session_state.official_sensex_open is None and smart_api_instance is not None:
-        s_exact_open = fetch_official_broker_open("BSE", "1")
+        s_exact_open = fetch_official_broker_open("BSE", "SENSEX")
         if s_exact_open > 0:
             st.session_state.official_sensex_open = s_exact_open
         else:
-            s_live_s = fetch_live_ltp_safely("BSE", "SENSEX")
-            if s_live_s > 0:
-                st.session_state.official_sensex_open = s_live_s
+            st.session_state.official_sensex_open = 75000.0
 
-    s_spot_open = st.session_state.official_sensex_open if st.session_state.official_sensex_open is not None else 73000.0
+    s_spot_open = st.session_state.official_sensex_open
     ss_code = calculate_custom_digit_code(s_spot_open)
 
     st.markdown(f"""
