@@ -43,7 +43,6 @@ st.markdown("""
 API_KEY = "GAuh625s"
 CLIENT_CODE = "N417637"
 PASSWORD = "1003"
-TOTP_SECRET = "2YRKKEYE2HZD562KPXZTK7PXJY"
 
 # ==================== Global State ====================
 if "live_ltp" not in st.session_state:
@@ -71,26 +70,39 @@ if "sensex_day_locked" not in st.session_state:
     st.session_state.sensex_s_open = 0.0
     st.session_state.sensex_f_open = 0.0
 
-# ==================== SmartConnect Session & LTP ====================
-@st.cache_resource
-def get_smart_connect_session():
+# ==================== STREAMLIT UI & MANUAL OTP LOGIN ====================
+st.title("⚡ Algo Strike Scanner")
+
+# ऐप के ऊपर ही मैनुअल OTP डालने के लिए बॉक्स
+st.markdown("### 🔐 Broker Authentication (OTP Login)")
+manual_otp = st.text_input("Google Authenticator OTP (6 Digits)", type="password", key="manual_otp_input")
+
+@st.cache_resource(ttl=600)
+def get_smart_connect_session_with_otp(otp_code):
+    if not otp_code or len(otp_code) != 6:
+        return None
     try:
         smart_api = SmartConnect(api_key=API_KEY)
-        totp = pyotp.TOTP(TOTP_SECRET).now()
-        data = smart_api.generateSession(CLIENT_CODE, PASSWORD, totp)
+        data = smart_api.generateSession(CLIENT_CODE, PASSWORD, otp_code)
         if data and data.get('status'):
             return smart_api
         else:
-            st.error(f"SmartAPI Login Failed: {data}")
+            st.error(f"Login Failed: {data}")
     except Exception as e:
-        st.error(f"SmartAPI Connection Error: {e}")
+        st.error(f"Connection Exception: {e}")
     return None
 
+# अगर OTP डाला गया है, तभी सेशन कनेक्ट होगा
+smart_api_instance = None
+if manual_otp and len(manual_otp) == 6:
+    smart_api_instance = get_smart_connect_session_with_otp(manual_otp)
+    if smart_api_instance:
+        st.success("✅ Connected to Broker Successfully!")
+
 def fetch_live_ltp_from_broker(exchange, symbol, token):
-    smart_api = get_smart_connect_session()
-    if smart_api:
+    if smart_api_instance:
         try:
-            ltp_data = smart_api.ltpData(exchange, symbol, token)
+            ltp_data = smart_api_instance.ltpData(exchange, symbol, token)
             if ltp_data and 'data' in ltp_data:
                 return float(ltp_data['data'].get('ltp', 0.0))
         except Exception as e:
@@ -135,9 +147,6 @@ def find_digit_strikes(current_spot, step, target_digit):
     next_strike = matched_strikes[idx + 1] if idx < len(matched_strikes) - 1 else main_strike + step
     
     return [main_strike, rev_strike, next_strike]
-
-# ==================== STREAMLIT UI ====================
-st.title("⚡ Algo Strike Scanner")
 
 tab_nifty, tab_sensex = st.tabs(["📊 Nifty", "📈 Sensex"])
 
