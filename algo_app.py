@@ -92,6 +92,27 @@ if manual_otp and len(manual_otp) == 6:
     if smart_api_instance:
         st.success("✅ Connected to Broker Successfully!")
 
+def fetch_day_open_price(exchange, symbol, token):
+    if smart_api_instance:
+        try:
+            # सटीक डे ओपन कैंडल डेटा फेच करना
+            from_date = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d 09:00")
+            to_date = datetime.now().strftime("%Y-%m-%d 15:30")
+            params = {
+                "exchange": exchange,
+                "symboltoken": token,
+                "interval": "ONE_DAY",
+                "fromdate": from_date,
+                "todate": to_date
+            }
+            candledata = smart_api_instance.getCandleData(params)
+            if candledata and 'data' in candledata and candledata['data']:
+                latest_candle = candledata['data'][-1]
+                return float(latest_candle[1]) # Open Price
+        except Exception as e:
+            pass
+    return 0.0
+
 def fetch_live_ltp_from_broker(exchange, symbol, token):
     if smart_api_instance:
         try:
@@ -141,6 +162,7 @@ def find_digit_strikes(current_spot, step, target_digit):
     return [main_strike, rev_strike, next_strike]
 
 def get_current_expiry_symbol(index_name, strike, opt_type):
+    # आगामी गुरुवार की सही एक्सपायरी फॉर्मेट (जैसे NIFTY06NOV2623250CE)
     now = datetime.now()
     days_to_thu = (3 - now.weekday()) % 7
     if days_to_thu == 0 and now.hour >= 15:
@@ -158,13 +180,16 @@ tab_nifty, tab_sensex = st.tabs(["📊 Nifty", "📈 Sensex"])
 
 # ----------- NIFTY TAB -----------
 with tab_nifty:
-    live_n_spot = fetch_live_ltp_from_broker("NSE", "NIFTY", "26000")
-    
-    # डे ओपन प्राइस: जैसे ही मार्केट से पहला भाव मिलेगा, वह उसे आज का पक्का ओपन मानकर लॉक कर देगा
-    if st.session_state.fixed_nifty_open is None and live_n_spot > 0:
-        st.session_state.fixed_nifty_open = live_n_spot
+    if st.session_state.fixed_nifty_open is None and smart_api_instance is not None:
+        candle_open = fetch_day_open_price("NSE", "NIFTY", "26000")
+        if candle_open > 0:
+            st.session_state.fixed_nifty_open = candle_open
+        else:
+            live_spot = fetch_live_ltp_from_broker("NSE", "NIFTY", "26000")
+            if live_spot > 0:
+                st.session_state.fixed_nifty_open = live_spot
 
-    n_spot_open = st.session_state.fixed_nifty_open if st.session_state.fixed_nifty_open is not None else (live_n_spot if live_n_spot > 0 else 23000.0)
+    n_spot_open = st.session_state.fixed_nifty_open if st.session_state.fixed_nifty_open is not None else 23000.0
     ns_code = calculate_custom_digit_code(n_spot_open)
 
     st.markdown(f"""
@@ -224,7 +249,7 @@ with tab_nifty:
     for s in strikes_d1 + strikes_d2:
         for opt_type in ["CE", "PE"]:
             trading_symbol = get_current_expiry_symbol("NIFTY", s, opt_type)
-            ltp_val = fetch_live_ltp_from_broker("NFO", trading_symbol, "0")
+            ltp_val = fetch_live_ltp_from_broker("NFO", trading_symbol, "")
             if ltp_val == 0.0:
                 ltp_val = st.session_state.live_ltp.get(trading_symbol, 0.0)
             else:
@@ -254,12 +279,16 @@ with tab_nifty:
 
 # ----------- SENSEX TAB -----------
 with tab_sensex:
-    live_s_spot = fetch_live_ltp_from_broker("BSE", "SENSEX", "1")
+    if st.session_state.fixed_sensex_open is None and smart_api_instance is not None:
+        s_candle_open = fetch_day_open_price("BSE", "SENSEX", "1")
+        if s_candle_open > 0:
+            st.session_state.fixed_sensex_open = s_candle_open
+        else:
+            s_live_spot = fetch_live_ltp_from_broker("BSE", "SENSEX", "1")
+            if s_live_spot > 0:
+                st.session_state.fixed_sensex_open = s_live_spot
 
-    if st.session_state.fixed_sensex_open is None and live_s_spot > 0:
-        st.session_state.fixed_sensex_open = live_s_spot
-
-    s_spot_open = st.session_state.fixed_sensex_open if st.session_state.fixed_sensex_open is not None else (live_s_spot if live_s_spot > 0 else 73000.0)
+    s_spot_open = st.session_state.fixed_sensex_open if st.session_state.fixed_sensex_open is not None else 73000.0
     ss_code = calculate_custom_digit_code(s_spot_open)
 
     st.markdown(f"""
@@ -310,7 +339,7 @@ with tab_sensex:
     s_d2 = int(sd2_str) if sd2_str.isdigit() else 8
     s_b1 = float(sb1_str) if sb1_str.replace('.', '', 1).isdigit() else 300.0
     s_b2 = float(sb2_str) if sb2_str.replace('.', '', 1).isdigit() else 350.0
-    s_sell = float(ssell_str) if ssell_str.replace('.', '', 1).isdigit() else 450.0
+    s_sell = float(ssell_str) if ssell_str.replace('.', '', 1).isdigit() === '0' else 450.0
 
     s_strikes_d1 = find_digit_strikes(s_spot_open, 100, s_d1)
     s_strikes_d2 = find_digit_strikes(s_spot_open, 100, s_d2)
@@ -319,7 +348,7 @@ with tab_sensex:
     for s in s_strikes_d1 + s_strikes_d2:
         for opt_type in ["CE", "PE"]:
             trading_symbol = get_current_expiry_symbol("SENSEX", s, opt_type)
-            ltp_val = fetch_live_ltp_from_broker("BFO", trading_symbol, "0")
+            ltp_val = fetch_live_ltp_from_broker("BFO", trading_symbol, "")
             if ltp_val == 0.0:
                 ltp_val = st.session_state.live_ltp.get(trading_symbol, 0.0)
             else:
@@ -348,5 +377,5 @@ with tab_sensex:
     st.table(pd.DataFrame(s_contracts))
 
 # ==================== High-Speed Live Refresh Loop ====================
-time.sleep(3)
+time.sleep(2)
 st.rerun()
