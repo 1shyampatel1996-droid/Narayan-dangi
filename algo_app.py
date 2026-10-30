@@ -94,7 +94,7 @@ if manual_otp and len(manual_otp) == 6:
     if smart_api_instance:
         st.success("✅ Connected to Broker Successfully!")
 
-# ==================== Robust Scrip Master & Live Token Mapping ====================
+# ==================== Scrip Master & Live Token Mapping ====================
 @st.cache_resource(ttl=3600)
 def load_angel_scrip_master():
     url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
@@ -120,7 +120,7 @@ def get_symbol_token(exchange, tradingsymbol):
     if scrip_df.empty:
         return ""
     try:
-        # Standard Angel One Master Column Matching
+        # Exact symbol matching from master json
         for col_exch, col_sym in [('exch_seg', 'symbol'), ('exchange', 'tradingsymbol')]:
             if col_exch in scrip_df.columns and col_sym in scrip_df.columns:
                 matched = scrip_df[(scrip_df[col_exch].astype(str).str.upper() == exchange.upper()) & 
@@ -128,7 +128,7 @@ def get_symbol_token(exchange, tradingsymbol):
                 if not matched.empty:
                     return str(matched.iloc[0]['token'])
                 
-        # Fallback search across any column matching the trading symbol
+        # Fallback partial/contains search for options
         for col in scrip_df.columns:
             sub = scrip_df[scrip_df[col].astype(str).str.upper() == tradingsymbol.upper()]
             if not sub.empty:
@@ -177,7 +177,6 @@ def fetch_official_broker_open(exchange, tradingsymbol):
         except Exception as e:
             pass
             
-    # Fallback to Live LTP if candle fails
     live_val = fetch_live_ltp_safely(exchange, tradingsymbol)
     if live_val > 0:
         return live_val
@@ -224,13 +223,14 @@ def find_digit_strikes(current_spot, step, target_digit):
     
     return [main_strike, rev_strike, next_strike]
 
+# Updated based on your screenshot format: e.g., NIFTY 03NOV26 23500 CE
 def get_current_expiry_symbol(index_name, strike, opt_type):
     now = datetime.now()
     days_to_thu = (3 - now.weekday()) % 7
     if days_to_thu == 0 and now.hour >= 15:
         days_to_thu = 7
     expiry_date = now + timedelta(days=days_to_thu)
-    exp_str = expiry_date.strftime("%d%b%y").upper()
+    exp_str = expiry_date.strftime("%d%b%y").upper() # Format like 03NOV26
     
     return f"{index_name}{exp_str}{int(strike)}{opt_type}"
 
