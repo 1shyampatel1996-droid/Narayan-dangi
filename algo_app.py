@@ -71,7 +71,7 @@ if "sensex_day_locked" not in st.session_state:
     st.session_state.sensex_s_open = 0.0
     st.session_state.sensex_f_open = 0.0
 
-# ==================== SmartConnect Session & LTP (With Error Catching) ====================
+# ==================== SmartConnect Session & LTP ====================
 @st.cache_resource
 def get_smart_connect_session():
     try:
@@ -83,7 +83,7 @@ def get_smart_connect_session():
         else:
             st.error(f"SmartAPI Login Failed: {data}")
     except Exception as e:
-        st.error(f"SmartAPI Connection Exception: {e}")
+        st.error(f"SmartAPI Connection Error: {e}")
     return None
 
 def fetch_live_ltp_from_broker(exchange, symbol, token):
@@ -94,7 +94,6 @@ def fetch_live_ltp_from_broker(exchange, symbol, token):
             if ltp_data and 'data' in ltp_data:
                 return float(ltp_data['data'].get('ltp', 0.0))
         except Exception as e:
-            # यदि कोई विशेष सिंबल या टोकन में एरर होगी तो वह यहाँ पकड़ी जाएगी
             pass
     return 0.0
 
@@ -154,7 +153,7 @@ with tab_nifty:
             st.session_state.nifty_s_open = live_n_spot
         if live_n_fut > 0:
             st.session_state.nifty_f_open = live_n_fut
-        if now_time.hour > 9 or (now_time.hour == 9 and now_time.minute >= 13):
+        if now_time.hour > 9 or (now_time.hour == 9 and now_time.minute >= 12):
             if st.session_state.nifty_s_open > 0:
                 st.session_state.nifty_day_locked = True
 
@@ -259,7 +258,7 @@ with tab_sensex:
             st.session_state.sensex_s_open = live_s_spot
         if live_s_fut > 0:
             st.session_state.sensex_f_open = live_s_fut
-        if now_time.hour > 9 or (now_time.hour == 9 and now_time.minute >= 13):
+        if now_time.hour > 9 or (now_time.hour == 9 and now_time.minute >= 12):
             if st.session_state.sensex_s_open > 0:
                 st.session_state.sensex_day_locked = True
 
