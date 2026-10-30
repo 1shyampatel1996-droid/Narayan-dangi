@@ -95,7 +95,6 @@ if manual_otp and len(manual_otp) == 6:
 def fetch_day_open_price(exchange, symbol, token):
     if smart_api_instance:
         try:
-            # सटीक डे ओपन कैंडल डेटा फेच करना
             from_date = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d 09:00")
             to_date = datetime.now().strftime("%Y-%m-%d 15:30")
             params = {
@@ -162,7 +161,6 @@ def find_digit_strikes(current_spot, step, target_digit):
     return [main_strike, rev_strike, next_strike]
 
 def get_current_expiry_symbol(index_name, strike, opt_type):
-    # आगामी गुरुवार की सही एक्सपायरी फॉर्मेट (जैसे NIFTY06NOV2623250CE)
     now = datetime.now()
     days_to_thu = (3 - now.weekday()) % 7
     if days_to_thu == 0 and now.hour >= 15:
@@ -339,7 +337,7 @@ with tab_sensex:
     s_d2 = int(sd2_str) if sd2_str.isdigit() else 8
     s_b1 = float(sb1_str) if sb1_str.replace('.', '', 1).isdigit() else 300.0
     s_b2 = float(sb2_str) if sb2_str.replace('.', '', 1).isdigit() else 350.0
-    s_sell = float(ssell_str) if ssell_str.replace('.', '', 1).isdigit() === '0' else 450.0
+    s_sell = float(ssell_str) if ssell_str.replace('.', '', 1).isdigit() else 450.0
 
     s_strikes_d1 = find_digit_strikes(s_spot_open, 100, s_d1)
     s_strikes_d2 = find_digit_strikes(s_spot_open, 100, s_d2)
