@@ -150,8 +150,8 @@ tab_nifty, tab_sensex = st.tabs(["📊 Nifty", "📈 Sensex"])
 with tab_nifty:
     now_time = datetime.now().time()
     
-    # केवल स्पॉट डेटा लिया जा रहा है
-    live_n_spot = fetch_live_ltp_from_broker("NSE", "NIFTY", "999920000")
+    # Nifty Spot correct token "26000" ke sath
+    live_n_spot = fetch_live_ltp_from_broker("NSE", "NIFTY", "26000")
     
     if not st.session_state.nifty_day_locked:
         if live_n_spot > 0:
@@ -250,7 +250,8 @@ with tab_nifty:
 
 # ----------- SENSEX TAB -----------
 with tab_sensex:
-    live_s_spot = fetch_live_ltp_from_broker("BSE", "SENSEX", "999919000")
+    # Sensex Spot correct token "1" ke sath
+    live_s_spot = fetch_live_ltp_from_broker("BSE", "SENSEX", "1")
 
     if not st.session_state.sensex_day_locked:
         if live_s_spot > 0:
@@ -346,3 +347,7 @@ with tab_sensex:
             })
     
     st.table(pd.DataFrame(s_contracts))
+
+# ==================== Auto-Refresh Loop (5 Seconds) ====================
+time.sleep(5)
+st.rerun()
