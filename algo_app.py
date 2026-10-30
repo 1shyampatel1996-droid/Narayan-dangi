@@ -60,12 +60,12 @@ if "nifty_pinned" not in st.session_state:
 if "sensex_pinned" not in st.session_state:
     st.session_state.sensex_pinned = None
 
-today_date = str(date.today())
-if "last_date" not in st.session_state or st.session_state.last_date != today_date:
-    st.session_state.last_date = today_date
-    st.session_state.nifty_day_open_val = None
-    st.session_state.sensex_day_open_val = None
-    st.session_state.strike_open_prices = {}
+# दिन का ओपन प्राइस सिर्फ एक बार सेव रखने के लिए
+today_str = str(date.today())
+if "day_open_date" not in st.session_state or st.session_state.day_open_date != today_str:
+    st.session_state.day_open_date = today_str
+    st.session_state.fixed_nifty_open = None
+    st.session_state.fixed_sensex_open = None
 
 # ==================== STREAMLIT UI & MANUAL OTP LOGIN ====================
 st.title("⚡ Algo Strike Scanner")
@@ -109,7 +109,6 @@ def fetch_day_open_candle(exchange, symbol, token):
             }
             candledata = smart_api_instance.getCandleData(params)
             if candledata and 'data' in candledata and candledata['data']:
-                # कैंडल डेटा फॉर्मेट: [Timestamp, Open, High, Low, Close, Volume]
                 latest_candle = candledata['data'][-1]
                 return float(latest_candle[1]) # Open price
         except Exception as e:
@@ -165,17 +164,14 @@ def find_digit_strikes(current_spot, step, target_digit):
     
     return [main_strike, rev_strike, next_strike]
 
-# करंट एक्सपायरी फॉर्मेट जनरेट करने के लिए (जैसे Nifty वीकली / मंथली सिंबल के लिए)
+# करंट एक्सपायरी सिंबल जनरेटर
 def get_current_expiry_symbol(index_name, strike, opt_type):
-    # यह वर्तमान चालू एक्सपायरी का ट्रेडिंग सिंबल तैयार करता है
-    # उदाहरण के लिए NIFTY के लिए वर्तमान एक्सपायरी फॉर्मेट
     now = datetime.now()
-    # आगामी गुरुवार (Thursday) की गणना या सामान्य नियम
     days_to_thu = (3 - now.weekday()) % 7
     if days_to_thu == 0 and now.hour >= 15:
         days_to_thu = 7
     expiry_date = now + timedelta(days=days_to_thu)
-    exp_str = expiry_date.strftime("%d%b%y").upper() # जैसे 05NOV26
+    exp_str = expiry_date.strftime("%d%b%y").upper()
     
     if index_name == "NIFTY":
         return f"NIFTY{exp_str}{int(strike)}{opt_type}"
@@ -187,18 +183,18 @@ tab_nifty, tab_sensex = st.tabs(["📊 Nifty", "📈 Sensex"])
 
 # ----------- NIFTY TAB -----------
 with tab_nifty:
-    if st.session_state.nifty_day_open_val is None:
-        day_open_val = fetch_day_open_candle("NSE", "NIFTY", "26000")
-        if day_open_val > 0:
-            st.session_state.nifty_day_open_val = day_open_val
+    # डे ओपन प्राइस केवल एक बार फिक्स किया जाएगा
+    if st.session_state.fixed_nifty_open is None and smart_api_instance is not None:
+        val = fetch_day_open_candle("NSE", "NIFTY", "26000")
+        if val > 0:
+            st.session_state.fixed_nifty_open = val
 
-    live_n_spot = fetch_live_ltp_from_broker("NSE", "NIFTY", "26000")
-    n_spot_open = st.session_state.nifty_day_open_val if st.session_state.nifty_day_open_val is not None else (live_n_spot if live_n_spot > 0 else 24000.0)
+    n_spot_open = st.session_state.fixed_nifty_open if st.session_state.fixed_nifty_open is not None else 23005.3
     ns_code = calculate_custom_digit_code(n_spot_open)
 
     st.markdown(f"""
         <div class="compact-box">
-            <b>Nifty 1-Day Open:</b> {n_spot_open} &nbsp;|&nbsp; Code: <b>{ns_code}</b>
+            <b>Nifty Day Open:</b> {n_spot_open} &nbsp;|&nbsp; Code: <b>{ns_code}</b>
         </div>
     """, unsafe_allow_html=True)
 
@@ -283,18 +279,17 @@ with tab_nifty:
 
 # ----------- SENSEX TAB -----------
 with tab_sensex:
-    if st.session_state.sensex_day_open_val is None:
-        s_day_open_val = fetch_day_open_candle("BSE", "SENSEX", "1")
-        if s_day_open_val > 0:
-            st.session_state.sensex_day_open_val = s_day_open_val
+    if st.session_state.fixed_sensex_open is None and smart_api_instance is not None:
+        s_val = fetch_day_open_candle("BSE", "SENSEX", "1")
+        if s_val > 0:
+            st.session_state.fixed_sensex_open = s_val
 
-    live_s_spot = fetch_live_ltp_from_broker("BSE", "SENSEX", "1")
-    s_spot_open = st.session_state.sensex_day_open_val if st.session_state.sensex_day_open_val is not None else (live_s_spot if live_s_spot > 0 else 73250.0)
+    s_spot_open = st.session_state.fixed_sensex_open if st.session_state.fixed_sensex_open is not None else 73250.0
     ss_code = calculate_custom_digit_code(s_spot_open)
 
     st.markdown(f"""
         <div class="compact-box">
-            <b>Sensex 1-Day Open:</b> {s_spot_open} &nbsp;|&nbsp; Code: <b>{ss_code}</b>
+            <b>Sensex Day Open:</b> {s_spot_open} &nbsp;|&nbsp; Code: <b>{ss_code}</b>
         </div>
     """, unsafe_allow_html=True)
 
