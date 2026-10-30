@@ -71,7 +71,7 @@ if "sensex_day_locked" not in st.session_state:
     st.session_state.sensex_s_open = 0.0
     st.session_state.sensex_f_open = 0.0
 
-# ==================== SmartConnect Session & LTP ====================
+# ==================== SmartConnect Session & LTP (With Error Catching) ====================
 @st.cache_resource
 def get_smart_connect_session():
     try:
@@ -80,8 +80,10 @@ def get_smart_connect_session():
         data = smart_api.generateSession(CLIENT_CODE, PASSWORD, totp)
         if data and data.get('status'):
             return smart_api
+        else:
+            st.error(f"SmartAPI Login Failed: {data}")
     except Exception as e:
-        pass
+        st.error(f"SmartAPI Connection Exception: {e}")
     return None
 
 def fetch_live_ltp_from_broker(exchange, symbol, token):
@@ -92,6 +94,7 @@ def fetch_live_ltp_from_broker(exchange, symbol, token):
             if ltp_data and 'data' in ltp_data:
                 return float(ltp_data['data'].get('ltp', 0.0))
         except Exception as e:
+            # यदि कोई विशेष सिंबल या टोकन में एरर होगी तो वह यहाँ पकड़ी जाएगी
             pass
     return 0.0
 
@@ -224,23 +227,18 @@ with tab_nifty:
             else:
                 st.session_state.live_ltp[strike_name] = ltp_val
 
-            # Track Open Price for the strike
             if strike_name not in st.session_state.strike_open_prices and ltp_val > 0:
                 st.session_state.strike_open_prices[strike_name] = ltp_val
             strike_open = st.session_state.strike_open_prices.get(strike_name, ltp_val)
 
-            # Get previous LTP for direction check
             old_ltp = st.session_state.prev_ltp.get(strike_name, ltp_val)
             st.session_state.prev_ltp[strike_name] = ltp_val
 
             if ltp_val > 0 and st.session_state.nifty_pinned is None:
-                # Buy 1 Condition: Top to bottom approach & Open price must not be below Buy 1
                 if strike_open >= n_b1 and old_ltp >= n_b1 and ltp_val <= n_b1 and abs(ltp_val - n_b1) <= 2.0:
                     st.session_state.nifty_pinned = f"{strike_name} @ ₹{ltp_val} (Buy 1)"
-                # Buy 2 Condition
                 elif strike_open >= n_b2 and old_ltp >= n_b2 and ltp_val <= n_b2 and abs(ltp_val - n_b2) <= 2.0:
                     st.session_state.nifty_pinned = f"{strike_name} @ ₹{ltp_val} (Buy 2)"
-                # Sell Condition: Bottom to top approach & Open price must not be above Sell price
                 elif strike_open <= n_sell and old_ltp <= n_sell and ltp_val >= n_sell and abs(ltp_val - n_sell) <= 2.0:
                     st.session_state.nifty_pinned = f"{strike_name} @ ₹{ltp_val} (Sell)"
 
