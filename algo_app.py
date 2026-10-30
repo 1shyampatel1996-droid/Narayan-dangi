@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import requests
 import pyotp
 import time
 from datetime import datetime, date, timedelta
@@ -60,7 +59,6 @@ if "nifty_pinned" not in st.session_state:
 if "sensex_pinned" not in st.session_state:
     st.session_state.sensex_pinned = None
 
-# दिन का ओपन प्राइस सिर्फ एक बार सेव रखने के लिए
 today_str = str(date.today())
 if "day_open_date" not in st.session_state or st.session_state.day_open_date != today_str:
     st.session_state.day_open_date = today_str
@@ -94,23 +92,17 @@ if manual_otp and len(manual_otp) == 6:
     if smart_api_instance:
         st.success("✅ Connected to Broker Successfully!")
 
-def fetch_day_open_candle(exchange, symbol, token):
+def fetch_exact_day_open(exchange, symbol, token):
     if smart_api_instance:
         try:
-            from_date = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d 09:00")
-            to_date = datetime.now().strftime("%Y-%m-%d 15:30")
-            
-            params = {
+            # OHLC API se direct current day ka official Open price milta hai
+            ohlc_data = smart_api_instance.ohlc({
                 "exchange": exchange,
                 "symboltoken": token,
-                "interval": "ONE_DAY",
-                "fromdate": from_date,
-                "todate": to_date
-            }
-            candledata = smart_api_instance.getCandleData(params)
-            if candledata and 'data' in candledata and candledata['data']:
-                latest_candle = candledata['data'][-1]
-                return float(latest_candle[1]) # Open price
+                "interval": "ONE_DAY"
+            })
+            if ohlc_data and 'data' in ohlc_data:
+                return float(ohlc_data['data'].get('open', 0.0))
         except Exception as e:
             pass
     return 0.0
@@ -141,7 +133,6 @@ def calculate_custom_digit_code(price):
     code_3digit = f"{total_sum}{single_digit}"
     return code_3digit
 
-# ==================== Strike Finder ====================
 def find_digit_strikes(current_spot, step, target_digit):
     if current_spot == 0:
         current_spot = 24000.0
@@ -164,7 +155,6 @@ def find_digit_strikes(current_spot, step, target_digit):
     
     return [main_strike, rev_strike, next_strike]
 
-# करंट एक्सपायरी सिंबल जनरेटर
 def get_current_expiry_symbol(index_name, strike, opt_type):
     now = datetime.now()
     days_to_thu = (3 - now.weekday()) % 7
@@ -183,9 +173,8 @@ tab_nifty, tab_sensex = st.tabs(["📊 Nifty", "📈 Sensex"])
 
 # ----------- NIFTY TAB -----------
 with tab_nifty:
-    # डे ओपन प्राइस केवल एक बार फिक्स किया जाएगा
     if st.session_state.fixed_nifty_open is None and smart_api_instance is not None:
-        val = fetch_day_open_candle("NSE", "NIFTY", "26000")
+        val = fetch_exact_day_open("NSE", "NIFTY", "26000")
         if val > 0:
             st.session_state.fixed_nifty_open = val
 
@@ -194,7 +183,7 @@ with tab_nifty:
 
     st.markdown(f"""
         <div class="compact-box">
-            <b>Nifty Day Open:</b> {n_spot_open} &nbsp;|&nbsp; Code: <b>{ns_code}</b>
+            <b>Nifty Day Open (Locked):</b> {n_spot_open} &nbsp;|&nbsp; Code: <b>{ns_code}</b>
         </div>
     """, unsafe_allow_html=True)
 
@@ -245,42 +234,46 @@ with tab_nifty:
     strikes_d1 = find_digit_strikes(n_spot_open, 50, n_d1)
     strikes_d2 = find_digit_strikes(n_spot_open, 50, n_d2)
 
-    contracts = []
-    for s in strikes_d1 + strikes_d2:
-        for opt_type in ["CE", "PE"]:
-            trading_symbol = get_current_expiry_symbol("NIFTY", s, opt_type)
-            ltp_val = fetch_live_ltp_from_broker("NFO", trading_symbol, "0")
-            if ltp_val == 0.0:
-                ltp_val = st.session_state.live_ltp.get(trading_symbol, 0.0)
-            else:
-                st.session_state.live_ltp[trading_symbol] = ltp_val
+    # Fast Refresh Fragment for Nifty Option Chain
+    @st.fragment(run_every=2)
+    def render_nifty_chain():
+        contracts = []
+        for s in strikes_d1 + strikes_d2:
+            for opt_type in ["CE", "PE"]:
+                trading_symbol = get_current_expiry_symbol("NIFTY", s, opt_type)
+                ltp_val = fetch_live_ltp_from_broker("NFO", trading_symbol, "0")
+                if ltp_val == 0.0:
+                    ltp_val = st.session_state.live_ltp.get(trading_symbol, 0.0)
+                else:
+                    st.session_state.live_ltp[trading_symbol] = ltp_val
 
-            if trading_symbol not in st.session_state.strike_open_prices and ltp_val > 0:
-                st.session_state.strike_open_prices[trading_symbol] = ltp_val
-            strike_open = st.session_state.strike_open_prices.get(trading_symbol, ltp_val)
+                if trading_symbol not in st.session_state.strike_open_prices and ltp_val > 0:
+                    st.session_state.strike_open_prices[trading_symbol] = ltp_val
+                strike_open = st.session_state.strike_open_prices.get(trading_symbol, ltp_val)
 
-            old_ltp = st.session_state.prev_ltp.get(trading_symbol, ltp_val)
-            st.session_state.prev_ltp[trading_symbol] = ltp_val
+                old_ltp = st.session_state.prev_ltp.get(trading_symbol, ltp_val)
+                st.session_state.prev_ltp[trading_symbol] = ltp_val
 
-            if ltp_val > 0 and st.session_state.nifty_pinned is None:
-                if strike_open >= n_b1 and old_ltp >= n_b1 and ltp_val <= n_b1 and abs(ltp_val - n_b1) <= 2.0:
-                    st.session_state.nifty_pinned = f"{trading_symbol} @ ₹{ltp_val} (Buy 1)"
-                elif strike_open >= n_b2 and old_ltp >= n_b2 and ltp_val <= n_b2 and abs(ltp_val - n_b2) <= 2.0:
-                    st.session_state.nifty_pinned = f"{trading_symbol} @ ₹{ltp_val} (Buy 2)"
-                elif strike_open <= n_sell and old_ltp <= n_sell and ltp_val >= n_sell and abs(ltp_val - n_sell) <= 2.0:
-                    st.session_state.nifty_pinned = f"{trading_symbol} @ ₹{ltp_val} (Sell)"
+                if ltp_val > 0 and st.session_state.nifty_pinned is None:
+                    if strike_open >= n_b1 and old_ltp >= n_b1 and ltp_val <= n_b1 and abs(ltp_val - n_b1) <= 2.0:
+                        st.session_state.nifty_pinned = f"{trading_symbol} @ ₹{ltp_val} (Buy 1)"
+                    elif strike_open >= n_b2 and old_ltp >= n_b2 and ltp_val <= n_b2 and abs(ltp_val - n_b2) <= 2.0:
+                        st.session_state.nifty_pinned = f"{trading_symbol} @ ₹{ltp_val} (Buy 2)"
+                    elif strike_open <= n_sell and old_ltp <= n_sell and ltp_val >= n_sell and abs(ltp_val - n_sell) <= 2.0:
+                        st.session_state.nifty_pinned = f"{trading_symbol} @ ₹{ltp_val} (Sell)"
 
-            contracts.append({
-                "Strike": f"{s} {opt_type}", "LTP": ltp_val, 
-                "Buy 1": n_b1, "Buy 2": n_b2, "Sell": n_sell
-            })
-    
-    st.table(pd.DataFrame(contracts))
+                contracts.append({
+                    "Strike": f"{s} {opt_type}", "LTP": ltp_val, 
+                    "Buy 1": n_b1, "Buy 2": n_b2, "Sell": n_sell
+                })
+        st.table(pd.DataFrame(contracts))
+
+    render_nifty_chain()
 
 # ----------- SENSEX TAB -----------
 with tab_sensex:
     if st.session_state.fixed_sensex_open is None and smart_api_instance is not None:
-        s_val = fetch_day_open_candle("BSE", "SENSEX", "1")
+        s_val = fetch_exact_day_open("BSE", "SENSEX", "1")
         if s_val > 0:
             st.session_state.fixed_sensex_open = s_val
 
@@ -289,7 +282,7 @@ with tab_sensex:
 
     st.markdown(f"""
         <div class="compact-box">
-            <b>Sensex Day Open:</b> {s_spot_open} &nbsp;|&nbsp; Code: <b>{ss_code}</b>
+            <b>Sensex Day Open (Locked):</b> {s_spot_open} &nbsp;|&nbsp; Code: <b>{ss_code}</b>
         </div>
     """, unsafe_allow_html=True)
 
@@ -340,38 +333,38 @@ with tab_sensex:
     s_strikes_d1 = find_digit_strikes(s_spot_open, 100, s_d1)
     s_strikes_d2 = find_digit_strikes(s_spot_open, 100, s_d2)
 
-    s_contracts = []
-    for s in s_strikes_d1 + s_strikes_d2:
-        for opt_type in ["CE", "PE"]:
-            trading_symbol = get_current_expiry_symbol("SENSEX", s, opt_type)
-            ltp_val = fetch_live_ltp_from_broker("BFO", trading_symbol, "0")
-            if ltp_val == 0.0:
-                ltp_val = st.session_state.live_ltp.get(trading_symbol, 0.0)
-            else:
-                st.session_state.live_ltp[trading_symbol] = ltp_val
+    # Fast Refresh Fragment for Sensex Option Chain
+    @st.fragment(run_every=2)
+    def render_sensex_chain():
+        s_contracts = []
+        for s in s_strikes_d1 + s_strikes_d2:
+            for opt_type in ["CE", "PE"]:
+                trading_symbol = get_current_expiry_symbol("SENSEX", s, opt_type)
+                ltp_val = fetch_live_ltp_from_broker("BFO", trading_symbol, "0")
+                if ltp_val == 0.0:
+                    ltp_val = st.session_state.live_ltp.get(trading_symbol, 0.0)
+                else:
+                    st.session_state.live_ltp[trading_symbol] = ltp_val
 
-            if trading_symbol not in st.session_state.strike_open_prices and ltp_val > 0:
-                st.session_state.strike_open_prices[trading_symbol] = ltp_val
-            strike_open = st.session_state.strike_open_prices.get(trading_symbol, ltp_val)
+                if trading_symbol not in st.session_state.strike_open_prices and ltp_val > 0:
+                    st.session_state.strike_open_prices[trading_symbol] = ltp_val
+                strike_open = st.session_state.strike_open_prices.get(trading_symbol, ltp_val)
 
-            old_ltp = st.session_state.prev_ltp.get(trading_symbol, ltp_val)
-            st.session_state.prev_ltp[trading_symbol] = ltp_val
+                old_ltp = st.session_state.prev_ltp.get(trading_symbol, ltp_val)
+                st.session_state.prev_ltp[trading_symbol] = ltp_val
 
-            if ltp_val > 0 and st.session_state.sensex_pinned is None:
-                if strike_open >= s_b1 and old_ltp >= s_b1 and ltp_val <= s_b1 and abs(ltp_val - s_b1) <= 2.0:
-                    st.session_state.sensex_pinned = f"{trading_symbol} @ ₹{ltp_val} (Buy 1)"
-                elif strike_open >= s_b2 and old_ltp >= s_b2 and ltp_val <= s_b2 and abs(ltp_val - s_b2) <= 2.0:
-                    st.session_state.sensex_pinned = f"{trading_symbol} @ ₹{ltp_val} (Buy 2)"
-                elif strike_open <= s_sell and old_ltp <= s_sell and ltp_val >= s_sell and abs(ltp_val - s_sell) <= 2.0:
-                    st.session_state.sensex_pinned = f"{trading_symbol} @ ₹{ltp_val} (Sell)"
+                if ltp_val > 0 and st.session_state.sensex_pinned is None:
+                    if strike_open >= s_b1 and old_ltp >= s_b1 and ltp_val <= s_b1 and abs(ltp_val - s_b1) <= 2.0:
+                        st.session_state.sensex_pinned = f"{trading_symbol} @ ₹{ltp_val} (Buy 1)"
+                    elif strike_open >= s_b2 and old_ltp >= s_b2 and ltp_val <= s_b2 and abs(ltp_val - s_b2) <= 2.0:
+                        st.session_state.sensex_pinned = f"{trading_symbol} @ ₹{ltp_val} (Buy 2)"
+                    elif strike_open <= s_sell and old_ltp <= s_sell and ltp_val >= s_sell and abs(ltp_val - s_sell) <= 2.0:
+                        st.session_state.sensex_pinned = f"{trading_symbol} @ ₹{ltp_val} (Sell)"
 
-            s_contracts.append({
-                "Strike": f"{s} {opt_type}", "LTP": ltp_val, 
-                "Buy 1": s_b1, "Buy 2": s_b2, "Sell": s_sell
-            })
-    
-    st.table(pd.DataFrame(s_contracts))
+                s_contracts.append({
+                    "Strike": f"{s} {opt_type}", "LTP": ltp_val, 
+                    "Buy 1": s_b1, "Buy 2": s_b2, "Sell": s_sell
+                })
+        st.table(pd.DataFrame(s_contracts))
 
-# ==================== Auto-Refresh Loop (5 Seconds) ====================
-time.sleep(5)
-st.rerun()
+    render_sensex_chain()
