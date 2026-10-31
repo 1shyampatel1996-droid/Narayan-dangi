@@ -1,28 +1,38 @@
-# Narayan Scanner — Android foundation
-Native Kotlin / Jetpack Compose starter. This is an offline UI and rule-engine milestone, not a connected trading app.
-The current Streamlit app is unchanged.
+# Narayan Scanner — native Android
+Independent Kotlin / Jetpack Compose app. Existing Streamlit files are unchanged.
 
 ## Implemented
-- Dark Material 3 phone layout, four index OPEN cards, two digit selectors.
-- Four buy targets and two sell-short targets; persisted locally.
-- Exact decimal rules: LTP in inclusive target ±10%; BUY open strictly > target ×1.10; SELL_SHORT open strictly < target ×0.90.
-- Contract-specific open, separate CALL/PUT identity, expiry and session date.
-- Best Buy / Best Sell Short local immutable history with deduplication.
-- Explicit demo mode. Simulated prices are never labelled live and are never saved as real signals.
-- Local records survive restart; Android backup disabled.
+- Native dark Material 3 layout: four market OPEN/digit cards, two digit selectors,
+  four buy targets and two sell-short targets.
+- NIFTY options, current expiry selector, previous/nearest/next matching digit strikes,
+  both CALL and PUT. Duplicate selected contracts are combined.
+- LTP inclusive target ±10%; BUY contract open strictly > target ×1.10;
+  SELL_SHORT contract open strictly < target ×0.90. Decimal boundary calculations.
+- Best Buy and Best Sell Short immutable locally saved records: contract, expiry,
+  target, opening premium, matched premium and exchange timestamp.
+  Duplicate same-day contract/direction/target records are suppressed.
+- Angel One SmartAPI login with manually entered Authenticator OTP. First-time API key,
+  client ID and PIN setup is encrypted using Android Keystore AES-GCM.
+  JWT/feed tokens persist encrypted. OTP and TOTP seed are never persisted.
+- Reopen resumes and validates an unexpired broker session. Broker rejection, expiry
+  or explicit logout requires another OTP. Expiry is capped at broker midnight session policy.
+- WebSocket Quote mode, binary decoder based on official Angel One Python SDK,
+  heartbeat and bounded reconnect. All received ticks are considered for signals.
+  Screen updates coalesce to a 50 ms target without full-page reload.
+- Old-session or more-than-15-second-old quotes are shown as last available and cannot
+  create new signals. No REST polling loop, no order placement, no demo data.
+- Credential backup and cleartext network traffic disabled.
 
 ## Build
-Use JDK 17, Android SDK 35, Gradle 8.11.1. Open this android directory in Android Studio,
-or run gradle testDebugUnitTest assembleDebug.
-A Gradle wrapper is not bundled. No APK has yet been compiled or device-tested in this workspace.
+JDK 17, Android SDK 35, Gradle 8.11.1.
+Open this android directory in Android Studio, or run:
+    gradle testDebugUnitTest assembleDebug
+CI in .github/workflows/android-preview.yml publishes a debug APK artifact.
+The artifact is a development build; inspect the actual CI result before claiming it builds.
 
-## Pending
-Angel One authentication, secure credential handling, instrument master integration,
-WebSocket binary decoder, automatic reconnection and per-contract stale/session validation.
-The onQuote method is the integration boundary; call it on the main thread only after validating
-that a quote is authentic, current-session, correctly scaled and fresh.
-No broker credentials are embedded, and no order placement is implemented.
-Before release: verified build, emulator visual QA, device installation, live market latency test.
-
-## Confirmed login requirement
-Google Authenticator OTP once per Indian calendar day after successful broker verification. Resume a valid, securely stored broker session during that day without prompting again, including after process restart. Expiry, revocation, explicit logout requires authentication again. Do not force a new login merely because the calendar day changes while the broker session remains valid. SessionPolicy implements this decision only; authentication UI and encrypted token storage are still pending. The OTP itself must not be saved.
+## Remaining validation
+Real broker authentication and exchange-session quote behavior need on-device testing
+using the user's own credentials. Broker header/network requirements may affect login.
+Credentials must be entered only in the installed app, never in repository files.
+No claim of measured live latency or device visual QA has been made.
+Signals run only while the app is in the foreground; no background monitoring service.

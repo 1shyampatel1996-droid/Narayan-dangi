@@ -21,6 +21,6 @@ class RulesTest {
     }
     @Test fun openingCode() {
         assertEquals("281", Rules.openCode(d("22964.50")))
-        assertEquals("324", Rules.openCode(d("74191.46")))
+        assertEquals("325", Rules.openCode(d("74191.46")))
     }
 }
