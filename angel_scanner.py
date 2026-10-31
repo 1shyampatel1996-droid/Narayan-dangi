@@ -208,6 +208,7 @@ class LiveFeed:
         self.data, self.wanted, self.active = {}, set(), set()
         self.ready, self.closed = False, False
         self.last_tick, self.last_used = 0.0, time.monotonic()
+        self.tick_count = 0
         self.ws = SmartWebSocketV2(result["data"]["jwtToken"],
             values["ANGEL_API_KEY"], values["ANGEL_CLIENT_ID"],
             client.getfeedToken(), max_retry_attempt=3)
@@ -278,6 +279,7 @@ class LiveFeed:
             with self.lock:
                 self.data[(exchange, quote["symbolToken"])] = quote
                 self.last_tick = time.monotonic()
+                self.tick_count += 1
         except (KeyError, TypeError, ValueError, OverflowError):
             pass
 
@@ -337,7 +339,7 @@ def connect():
     return client
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_resource(ttl=3600, show_spinner=False)
 def instrument_master(day):
     response = requests.get(MASTER_URL, timeout=30)
     response.raise_for_status()
@@ -529,7 +531,7 @@ if st.button("दोबारा Login"):
 client = connect()
 
 
-@st.fragment(run_every=0.25)
+@st.fragment(run_every=0.1)
 def dashboard():
     today = datetime.now(IST).date()
 
@@ -770,10 +772,15 @@ def dashboard():
     st.caption(
         f"NIFTY {spot:,.2f} · "
         f"जाँच {datetime.now(IST).strftime('%H:%M:%S')} IST · "
-        "स्क्रीन अपडेट 250 ms · भाव 0 = target बंद"
+        "स्क्रीन अपडेट लक्ष्य 100 ms · भाव 0 = target बंद"
     )
 
     feed = st.session_state.get("angel_feed")
+    if feed and feed.last_tick:
+        st.caption(
+            f"Live ticks मिले: {feed.tick_count:,} · "
+            f"आखिरी tick {max(0, time.monotonic() - feed.last_tick):.1f} सेकंड पहले"
+        )
     if not feed or not feed.ready:
         st.caption("Live feed जुड़ रही है या उपलब्ध नहीं है; REST fallback चालू है।")
     elif time.monotonic() - feed.last_tick > 15:
