@@ -11,7 +11,8 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.Executors
 
 internal data class ScannerState(
-    val checking: Boolean = true, val loggedIn: Boolean = false, val configured: Boolean = false,
+    val index: String = "NIFTY", val scanStatus: String = "", val sessionDate: String = "",
+    val historical: List<Signal> = emptyList(), val checking: Boolean = true, val loggedIn: Boolean = false, val configured: Boolean = false,
     val busy: Boolean = false, val status: String = "Checking saved session…",
     val markets: List<Pair<String, Tick?>> = emptyList(), val quotes: List<Pair<Quote, Tick>> = emptyList(),
     val history: List<Signal> = emptyList(), val targets: List<String> = List(6) { "" },
@@ -27,12 +28,14 @@ internal class ScannerController(context: Context, private val render: (ScannerS
     private val main = Handler(Looper.getMainLooper())
     private var closed = false
     private var foreground = true
+    private var sessionCheckAt = 0L
+    private var historySave: Runnable? = null
     private var generation = 0
     private var pending = false
     private var state = ScannerState(
-        targets = (0..5).map { prefs.getString("target_$it", "") ?: "" },
-        digit1 = prefs.getString("digit1", "6") ?: "6",
-        digit2 = prefs.getString("digit2", "9") ?: "9",
+        targets = (0..5).map { prefs.getString("NIFTY_target_$it", prefs.getString("target_$it", "")) ?: "" },
+        digit1 = prefs.getString("NIFTY_digit1", prefs.getString("digit1", "6")) ?: "6",
+        digit2 = prefs.getString("NIFTY_digit2", prefs.getString("digit2", "9")) ?: "9",
         history = readHistory()
     )
     private var credentials: Credentials? = null
@@ -43,6 +46,13 @@ internal class ScannerController(context: Context, private val render: (ScannerS
     private var selected = emptyList<Instrument>()
     private val latest = HashMap<String, Tick>()
     private val signalKeys = state.history.map { it.key }.toMutableSet()
+    private val candleCache = HashMap<String, List<Candle>>()
+    private val candlePending = HashSet<String>()
+    private val candleAttempted = HashSet<String>()
+    private val activeMatches = HashSet<String>()
+    private val sessionDays = HashMap<String, LocalDate>()
+    private val settings = HashMap<String, Triple<String, String, List<String>>>()
+    private val expirySettings = HashMap<String, String>()
     private var spot: BigDecimal? = null
     private val seeded = HashSet<String>()
     private val clock = object : Runnable {
@@ -51,7 +61,12 @@ internal class ScannerController(context: Context, private val render: (ScannerS
                 if (closed || !foreground) return
                 if (state.loggedIn && session?.let { Instant.now().epochSecond >= it.expires } == true) {
                     invalidate("Session expired · enter a new authenticator code")
-                } else publish()
+                } else {
+                    if (state.loggedIn && instruments.isNotEmpty() && System.currentTimeMillis() - sessionCheckAt > 60000) {
+                        sessionCheckAt = System.currentTimeMillis(); loadSessionDays()
+                    }
+                    publish()
+                }
             }
             main.postDelayed(this, 1000)
         }
@@ -137,10 +152,11 @@ internal class ScannerController(context: Context, private val render: (ScannerS
                     "SENSEX" to spot(setOf("SENSEX", "BSE SENSEX"), "BSE"),
                     "SENSEX FUT" to future("SENSEX", "BFO")
                 )
-                val expiries = master.filter { it.name == "NIFTY" && it.kind == "OPTIDX" && it.exchange == "NFO" }
+                val expiries = master.filter { it.name == state.index && it.kind == "OPTIDX" && it.exchange == exchange(state.index) }
                     .mapNotNull { it.expiry?.toString() }.distinct().sorted()
                 state = state.copy(expiries = expiries,
                     expiry = state.expiry.takeIf { it in expiries } ?: expiries.firstOrNull().orEmpty())
+                prefs.edit().putString("${state.index}_expiry", state.expiry).apply()
                 startSocket()
             }
         }.onFailure { error ->
@@ -169,6 +185,7 @@ internal class ScannerController(context: Context, private val render: (ScannerS
         selectContracts()
         socket?.connect()
         seedQuotes(markets.mapNotNull { it.second })
+        loadSessionDays()
         publish()
     }
     @Synchronized private fun accept(tick: Tick, streamed: Boolean = true) {
@@ -180,7 +197,7 @@ internal class ScannerController(context: Context, private val render: (ScannerS
         if (old != null && tick.exchangeMillis < old.exchangeMillis) return
         latest[tick.key] = tick
         if (streamed) state = state.copy(ticks = state.ticks + 1, connected = true, status = "Live feed connected")
-        if (tick.key == markets.firstOrNull()?.second?.key && tick.ltp != null) {
+        if (markets.any { it.second?.key == tick.key } && tick.ltp != null) {
             spot = tick.ltp
             selectContracts()
         }
@@ -188,10 +205,19 @@ internal class ScannerController(context: Context, private val render: (ScannerS
         if (streamed && item != null && fresh(tick)) {
             val quote = Quote(item.contract(), tick.open, tick.ltp, LocalDate.now(IST).toString())
             val stamp = Instant.ofEpochMilli(tick.exchangeMillis).atZone(IST).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-            val added = state.targets.mapIndexedNotNull { index, input ->
+            config(item.name).third.forEachIndexed { i, input ->
+                val target = input.toBigDecimalOrNull() ?: return@forEachIndexed
+                val dir = if (i < 4) Direction.BUY else Direction.SELL_SHORT
+                if (!Rules.matches(target, quote.open, quote.ltp, dir)) activeMatches.remove(
+                    listOf(quote.sessionDate, quote.contract.token, dir.name, target.stripTrailingZeros().toPlainString()).joinToString("|"))
+            }
+            val added = config(item.name).third.mapIndexedNotNull { index, input ->
                 val target = input.toBigDecimalOrNull() ?: return@mapIndexedNotNull null
                 Rules.signal(quote, target, if (index < 4) Direction.BUY else Direction.SELL_SHORT, stamp)
-                    ?.takeIf { signalKeys.add(it.key) }
+                    ?.let { signal ->
+                        if (!activeMatches.add(signal.key)) null
+                        else signal.copy(key = signal.key + "|live|" + tick.exchangeMillis).takeIf { signalKeys.add(it.key) }
+                    }
             }
             if (added.isNotEmpty()) {
                 state = state.copy(history = state.history + added)
@@ -207,22 +233,27 @@ internal class ScannerController(context: Context, private val render: (ScannerS
             Instant.ofEpochMilli(t.exchangeMillis).atZone(IST).toLocalDate() == LocalDate.now(IST)
     }
     @Synchronized private fun selectContracts() {
+        val expiryByIndex = listOf("NIFTY", "SENSEX").associateWith { expiryFor(it) }
         val options = instruments.filter {
-            it.name == "NIFTY" && it.exchange == "NFO" && it.kind == "OPTIDX" &&
-                it.expiry?.toString() == state.expiry && it.strike > 0 &&
+            it.name in setOf("NIFTY", "SENSEX") && it.exchange == exchange(it.name) && it.kind == "OPTIDX" &&
+                it.expiry?.toString() == expiryByIndex[it.name] && it.strike > 0 &&
                 (it.symbol.endsWith("CE") || it.symbol.endsWith("PE"))
         }
-        val available = options.groupBy { it.strike }.filterValues { list ->
+        val paired = options.groupBy { it.name to it.strike }.filterValues { list ->
             list.any { it.symbol.endsWith("CE") } && list.any { it.symbol.endsWith("PE") }
-        }.keys.toList()
-        val price = spot
-        val strikes = if (price == null) emptySet() else
-            listOf(state.digit1, state.digit2).flatMap { d ->
-                d.toIntOrNull()?.let { Rules.nearby(available, it, price) } ?: emptyList()
+        }.keys
+        val strikes = listOf("NIFTY", "SENSEX").associateWith { index ->
+            val price = markets.firstOrNull { it.first == index }?.second?.let { latest[it.key]?.ltp }
+            val config = config(index)
+            if (price == null) emptySet() else listOf(config.first, config.second).flatMap { digit ->
+                digit.toIntOrNull()?.let { Rules.nearby(paired.filter { pair -> pair.first == index }.map { pair -> pair.second }, it, price) } ?: emptyList()
             }.toSet()
-        selected = options.filter { it.strike in strikes }.distinctBy { it.key }.sortedWith(compareBy({ it.strike }, { it.symbol }))
+        }
+        selected = options.filter { it.strike in strikes[it.name].orEmpty() }.distinctBy { it.key }
+            .sortedWith(compareBy({ it.name }, { it.strike }, { it.symbol }))
         socket?.subscribe(markets.mapNotNull { it.second } + selected)
         seedQuotes(selected)
+        loadHistoryCandles()
     }
     @Synchronized private fun seedQuotes(items: List<Instrument>) {
         val missing = items.filter { it.key !in latest && seeded.add(it.key) }
@@ -244,21 +275,136 @@ internal class ScannerController(context: Context, private val render: (ScannerS
     @Synchronized fun target(index: Int, text: String) {
         if (index !in 0..5 || !text.matches(Regex("[0-9]*\\.?[0-9]{0,2}")) || text.length > 12) return
         state = state.copy(targets = state.targets.toMutableList().apply { this[index] = text })
-        prefs.edit().putString("target_$index", text).apply()
+        prefs.edit().putString("${state.index}_target_$index", text).apply()
+        rememberConfig(); rescan()
         publish()
     }
     @Synchronized fun digit(index: Int, value: String) {
         if (value.isNotEmpty() && (value.length != 1 || value[0] !in '1'..'9')) return
         state = if (index == 0) state.copy(digit1 = value) else state.copy(digit2 = value)
-        prefs.edit().putString(if (index == 0) "digit1" else "digit2", value).apply()
+        prefs.edit().putString("${state.index}_" + if (index == 0) "digit1" else "digit2", value).apply()
+        rememberConfig()
         selectContracts(); publish()
     }
     @Synchronized fun expiry(value: String) {
         if (value !in state.expiries) return
-        state = state.copy(expiry = value); selectContracts(); publish()
+        state = state.copy(expiry = value); expirySettings[state.index] = value
+        prefs.edit().putString("${state.index}_expiry", value).apply(); selectContracts(); rescan(); publish()
+    }
+    private fun exchange(index: String) = if (index == "SENSEX") "BFO" else "NFO"
+    private fun config(index: String): Triple<String, String, List<String>> {
+        if (index == state.index) return Triple(state.digit1, state.digit2, state.targets)
+        return settings.getOrPut(index) { Triple(prefs.getString("${index}_digit1", "6") ?: "6",
+            prefs.getString("${index}_digit2", "9") ?: "9",
+            (0..5).map { prefs.getString("${index}_target_$it", "") ?: "" }) }
+    }
+    private fun rememberConfig() { settings[state.index] = Triple(state.digit1, state.digit2, state.targets) }
+    private fun expiryFor(index: String): String {
+        val available = instruments.filter { it.name == index && it.exchange == exchange(index) && it.kind == "OPTIDX" }
+            .mapNotNull { it.expiry?.toString() }.distinct().sorted()
+        val saved = if (index == state.index) state.expiry else expirySettings[index] ?: prefs.getString("${index}_expiry", "")
+        return saved?.takeIf { it in available } ?: available.firstOrNull().orEmpty()
+    }
+    @Synchronized fun switchIndex(index: String) {
+        if (index !in setOf("NIFTY", "SENSEX") || index == state.index) return
+        rememberConfig(); expirySettings[state.index] = state.expiry
+        val next = config(index)
+        val expiry = expiryFor(index)
+        val expiries = instruments.filter { it.name == index && it.exchange == exchange(index) && it.kind == "OPTIDX" }
+            .mapNotNull { it.expiry?.toString() }.distinct().sorted()
+        state = state.copy(index = index, digit1 = next.first, digit2 = next.second, targets = next.third,
+            expiry = expiry, expiries = expiries)
+        selectContracts(); rescan(); publish()
+    }
+    private fun historicalMatches(): List<Signal> = selected.filter { it.name == state.index }.flatMap { item ->
+        val day = sessionDays[item.name] ?: return@flatMap emptyList()
+        val bars = candleCache["${item.key}|$day"] ?: return@flatMap emptyList()
+        state.targets.flatMapIndexed { i, input -> input.toBigDecimalOrNull()?.let {
+            HistoricalScan.scan(item.contract(), bars, it, if (i < 4) Direction.BUY else Direction.SELL_SHORT)
+        } ?: emptyList() }
+    }.distinctBy { it.key }.sortedBy { it.time }
+    private fun rescan() {
+        state = state.copy(historical = historicalMatches())
+        historySave?.let { main.removeCallbacks(it) }
+        val save = Runnable { synchronized(this) {
+            if (!closed) {
+                val added = historicalMatches().filter { signalKeys.add(it.key) }
+                if (added.isNotEmpty()) {
+                    state = state.copy(history = state.history + added)
+                    val snapshot = state.history
+                    io.execute { writeHistory(snapshot) }
+                }
+                publish()
+            }
+        } }
+        historySave = save; main.postDelayed(save, 800)
+        publish()
+    }
+    private fun loadSessionDays() {
+        val c = credentials ?: return
+        val s = session ?: return
+        val attempt = generation
+        val spots = markets.filter { it.first in setOf("NIFTY", "SENSEX") }.mapNotNull { it.second }
+        io.execute {
+            spots.forEach { item ->
+                runCatching {
+                    val now = ZonedDateTime.now(IST)
+                    // Daily candles decide actual trading dates, including holidays.
+                    val end = if (now.toLocalTime() < LocalTime.of(15, 30)) now.toLocalDate().minusDays(1) else now.toLocalDate()
+                    Thread.sleep(400)
+                    val bars = api.candles(c, s, item, end.minusDays(20), end, "ONE_DAY")
+                    val day = bars.filter { Instant.ofEpochMilli(it.millis).atZone(IST).toLocalDate() <= end }.lastOrNull()?.let { Instant.ofEpochMilli(it.millis).atZone(IST).toLocalDate() }
+                        ?: throw BrokerError("No completed session data for ${item.name}.")
+                    synchronized(this) { if (attempt == generation && !closed) {
+                        sessionDays[if (item.exchange == "BSE") "SENSEX" else "NIFTY"] = day
+                        loadHistoryCandles(); publish()
+                    } }
+                }.onFailure { e -> synchronized(this) { if (attempt == generation) {
+                    state = state.copy(scanStatus = "Historical data unavailable: ${safeError(e)}"); publish()
+                } } }
+            }
+        }
+    }
+    @Synchronized private fun loadHistoryCandles() {
+        val c = credentials ?: return
+        val s = session ?: return
+        val attempt = generation
+        selected.forEach { item ->
+            val day = sessionDays[item.name] ?: return@forEach
+            val key = "${item.key}|$day"
+            if (key in candleCache || !candleAttempted.add(key) || !candlePending.add(key)) return@forEach
+            state = state.copy(scanStatus = "Loading last session · $day · one-minute data…")
+            io.execute {
+                val file = java.io.File(app.cacheDir, "candles-${item.exchangeType}-${item.token}-$day.json")
+                runCatching {
+                    val bars = if (file.exists()) {
+                        val rows = JSONArray(file.readText())
+                        (0 until rows.length()).map { i -> val r = rows.getJSONArray(i)
+                            Candle(r.getLong(0), r.getString(1).toBigDecimal(), r.getString(2).toBigDecimal(), r.getString(3).toBigDecimal(), r.getString(4).toBigDecimal()) }
+                    } else {
+                        Thread.sleep(400)
+                        api.candles(c, s, item, day, day).also { rows ->
+                            if (rows.isNotEmpty()) file.writeText(JSONArray().apply { rows.forEach {
+                                put(JSONArray(listOf(it.millis, it.open.toPlainString(), it.high.toPlainString(), it.low.toPlainString(), it.close.toPlainString())))
+                            } }.toString())
+                        }
+                    }
+                    if (bars.isEmpty()) throw BrokerError("No candles returned for ${item.symbol} on $day")
+                    synchronized(this) { if (attempt == generation && !closed) {
+                        candleCache[key] = bars
+                        state = state.copy(scanStatus = "Last session $day · one-minute OHLC matches · exact tick time unavailable")
+                        rescan()
+                    } }
+                }.onFailure { error -> synchronized(this) { if (attempt == generation) {
+                    state = state.copy(scanStatus = "Historical data incomplete: ${safeError(error)}"); publish()
+                } } }
+                synchronized(this) { candlePending.remove(key) }
+            }
+        }
     }
     @Synchronized fun reconnect() {
         if (!state.loggedIn) { state = state.copy(checking = false); publish(); return }
+        candleAttempted.clear()
         if (instruments.isEmpty()) io.execute { loadFeed() } else startSocket()
     }
     @Synchronized private fun invalidate(message: String) {
@@ -297,12 +443,13 @@ internal class ScannerController(context: Context, private val render: (ScannerS
                 if (closed) return@synchronized
                 state = state.copy(
                     markets = markets.map { (label, item) -> label to item?.let { latest[it.key] } },
-                    quotes = selected.mapNotNull { item ->
-                        latest[item.key]?.let { tick ->
-                            Quote(item.contract(), tick.open, tick.ltp,
-                                Instant.ofEpochMilli(tick.exchangeMillis).atZone(IST).toLocalDate().toString()) to tick
-                        }
-                    }
+                    quotes = selected.filter { it.name == state.index }.map { item ->
+                        val tick = latest[item.key] ?: Tick(item.key, null, null, 0L, 0L)
+                        Quote(item.contract(), tick.open, tick.ltp,
+                            Instant.ofEpochMilli(tick.exchangeMillis).atZone(IST).toLocalDate().toString()) to tick
+                    },
+                    historical = historicalMatches(),
+                    sessionDate = sessionDays[state.index]?.toString().orEmpty()
                 )
                 render(state)
             }
@@ -317,7 +464,7 @@ internal class ScannerController(context: Context, private val render: (ScannerS
             val s = a.getJSONObject(index)
             Signal(s.getString("key"), Contract(s.getString("token"), s.getInt("strike"), s.getString("side"), s.getString("expiry")),
                 Direction.valueOf(s.getString("direction")), s.getString("target").toBigDecimal(),
-                s.getString("price").toBigDecimal(), s.getString("open").toBigDecimal(), s.getString("time"), s.getString("day"))
+                s.getString("price").toBigDecimal(), s.getString("open").toBigDecimal(), s.getString("time"), s.getString("day"), s.optBoolean("historical"))
         }
     }.getOrDefault(emptyList())
     private fun writeHistory(history: List<Signal>) {
@@ -326,7 +473,7 @@ internal class ScannerController(context: Context, private val render: (ScannerS
             array.put(JSONObject().put("key", s.key).put("token", s.contract.token).put("strike", s.contract.strike)
                 .put("side", s.contract.side).put("expiry", s.contract.expiry).put("direction", s.direction.name)
                 .put("target", s.target.toPlainString()).put("price", s.matchedPrice.toPlainString())
-                .put("open", s.openingPrice.toPlainString()).put("time", s.time).put("day", s.sessionDate))
+                .put("open", s.openingPrice.toPlainString()).put("time", s.time).put("day", s.sessionDate).put("historical", s.historical))
         }
         prefs.edit().putString("locked_v2", array.toString()).commit()
     }

@@ -14,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -28,7 +30,7 @@ private val Navy = Color(0xFF0B1220)
 private val Panel = Color(0xFF162237)
 private val Muted = Color(0xFFAAB7CC)
 private fun money(v: BigDecimal?) = v?.setScale(2, java.math.RoundingMode.HALF_UP)?.toPlainString() ?: "—"
-private fun timeLabel(millis: Long) = if (millis <= 0) "समय नहीं मिला" else Instant.ofEpochMilli(millis).atZone(IST).format(DateTimeFormatter.ofPattern("dd MMM HH:mm:ss"))
+private fun timeLabel(millis: Long) = if (millis <= 0) "समय नहीं मिला" else Instant.ofEpochMilli(millis).atZone(IST).format(DateTimeFormatter.ofPattern("dd MMM, h:mm a"))
 private fun fresh(t: Tick): Boolean = System.currentTimeMillis() - t.exchangeMillis in 0..15000 &&
     Instant.ofEpochMilli(t.exchangeMillis).atZone(IST).toLocalDate() == LocalDate.now(IST)
 
@@ -107,134 +109,135 @@ class MainActivity : ComponentActivity() {
         keyboardOptions = KeyboardOptions(keyboardType = if (digits) KeyboardType.NumberPassword else KeyboardType.Password))
 }
 @Composable private fun NumberField(label: String, value: String, modifier: Modifier, update: (String) -> Unit) {
-    OutlinedTextField(value, update, modifier = modifier, label = { Text(label, fontSize = 12.sp) },
+    // Own edits synchronously; delayed market renders must never reset selection.
+    var local by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
+    OutlinedTextField(local, { next ->
+        val valid = if (label.startsWith("Digit")) next.text.isEmpty() || (next.text.length == 1 && next.text[0] in '1'..'9')
+            else next.text.length <= 12 && next.text.matches(Regex("[0-9]*\\.?[0-9]{0,2}"))
+        if (valid) { local = next; update(next.text) }
+    }, modifier = modifier, label = { Text(label, fontSize = 10.sp) },
+        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 16.sp),
         singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
 }
+private fun signalTime(s: Signal): String = runCatching {
+    OffsetDateTime.parse(s.time).atZoneSameInstant(IST).format(DateTimeFormatter.ofPattern("dd MMM, h:mm a")) + " IST"
+}.getOrDefault(s.time)
 @Composable private fun Dashboard(s: ScannerState, c: ScannerController) {
-    var listMode by rememberSaveable { mutableStateOf(0) }
-    var historyMode by rememberSaveable { mutableStateOf(0) }
+    val live = s.markets.firstOrNull { it.first == s.index }?.second?.let { fresh(it) } == true
+    val signals = (s.history.filter { signal ->
+        signal.contract.token.startsWith(if (s.index == "SENSEX") "4:" else "2:") &&
+            signal.sessionDate == (if (live) LocalDate.now(IST).toString() else s.sessionDate)
+    } + if (live) emptyList() else s.historical).distinctBy { it.key }
+    var inputs by rememberSaveable { mutableStateOf(true) }
     var expiryMenu by remember { mutableStateOf(false) }
-    fun match(q: Quote, direction: Direction): Boolean = (if (direction == Direction.BUY) s.targets.take(4) else s.targets.drop(4)).any {
-        it.toBigDecimalOrNull()?.let { target -> Rules.matches(target, q.open, q.ltp, direction) } == true
-    }
-    val rows = s.quotes.filter { (q, tick) ->
-        listMode == 0 || (s.connected && fresh(tick) && match(q, if (listMode == 1) Direction.BUY else Direction.SELL_SHORT))
-    }
-    val history = s.history.filter { it.direction == if (historyMode == 0) Direction.BUY else Direction.SELL_SHORT }
     LazyColumn(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
-        contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Branding("LIVE DIGIT SCANNER")
-                TextButton(onClick = c::logout) { Text("Logout", color = Muted, fontSize = 12.sp) }
+                Branding("DIGIT SCANNER · 0.2.1")
+                TextButton(onClick = c::logout) { Text("Logout", color = Muted) }
             }
-        }
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = Panel)) {
-                Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                    Text(s.status, color = if (s.connected) Green else Muted, fontSize = 12.sp)
-                    Text("Ticks ${s.ticks} · ${LocalDate.now(IST)}", color = Muted, fontSize = 10.sp)
-                    if (!s.connected) TextButton(onClick = c::reconnect) { Text("Reconnect") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("NIFTY", "SENSEX").forEach { index ->
+                    FilterChip(s.index == index, { c.switchIndex(index) }, label = { Text(index) })
                 }
             }
+            Text(if (live) "LIVE · ${LocalDate.now(IST)}" else "LAST SESSION · ${s.sessionDate.ifBlank { "Loading…" }}", color = Green, fontSize = 12.sp)
+            Text(s.status, color = Muted, fontSize = 10.sp)
         }
         item {
-            Text("DAY OPEN  /  DIGIT", color = Muted, fontSize = 10.sp, letterSpacing = 1.sp)
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                val cards = if (s.markets.isEmpty()) listOf("NIFTY", "NIFTY FUT", "SENSEX", "SENSEX FUT").map { it to null } else s.markets
-                cards.forEach { (label, tick) ->
-                    Card(Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Panel)) {
-                        Column(Modifier.padding(horizontal = 6.dp, vertical = 12.dp)) {
-                            Text(label, fontSize = 8.sp, color = Muted)
-                            Text(money(tick?.open), fontSize = 11.sp, maxLines = 1)
-                            Text(tick?.open?.let { Rules.openCode(it) } ?: "—", fontSize = 25.sp, color = Green, fontWeight = FontWeight.Bold)
-                            Text(tick?.let { timeLabel(it.exchangeMillis) } ?: "Waiting", fontSize = 8.sp, color = Muted)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                s.markets.forEach { (name, tick) ->
+                    Card(Modifier.weight(1f)) {
+                        Column(Modifier.padding(5.dp)) {
+                            Text(name, fontSize = 8.sp, color = Muted)
+                            Text(money(tick?.open), fontSize = 10.sp)
+                            Text(tick?.open?.let { Rules.openCode(it) } ?: "—", fontSize = 19.sp, color = Green)
                         }
                     }
                 }
             }
         }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NumberField("Strike digit 1", s.digit1, Modifier.weight(1f)) { c.digit(0, it) }
-                NumberField("Strike digit 2", s.digit2, Modifier.weight(1f)) { c.digit(1, it) }
+        item { TextButton(onClick = { inputs = !inputs }) { Text(if (inputs) "Hide settings · show all strikes" else "Edit digits / prices") } }
+        if (inputs) item {
+            key(s.index) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        NumberField("Digit 1", s.digit1, Modifier.weight(1f)) { c.digit(0, it) }
+                        NumberField("Digit 2", s.digit2, Modifier.weight(1f)) { c.digit(1, it) }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        for (i in 0..3) NumberField("Buy ${i + 1}", s.targets[i], Modifier.weight(1f)) { c.target(i, it) }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (i in 4..5) NumberField("Sell ${i - 3}", s.targets[i], Modifier.weight(1f)) { c.target(i, it) }
+                    }
+                }
             }
-        }
-        item { Text("BUY भाव", color = Green, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-        items(listOf(0, 2)) { start ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (i in start..start + 1) NumberField("Buy ${i + 1}", s.targets[i], Modifier.weight(1f)) { c.target(i, it) }
-            }
-        }
-        item { Text("SELL SHORT भाव", color = Red, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (i in 4..5) NumberField("Sell ${i - 3}", s.targets[i], Modifier.weight(1f)) { c.target(i, it) }
-            }
-            Text("भाव 0 / खाली = बंद · LTP ±10% · Buy OPEN >110% · Sell OPEN <90%", fontSize = 10.sp, color = Muted, modifier = Modifier.padding(top = 8.dp))
+            Text("Auto saved · ±10% · Buy OPEN >110% · Sell OPEN <90%", color = Muted, fontSize = 9.sp)
         }
         item {
             Box {
-                OutlinedButton(onClick = { expiryMenu = true }) { Text("NIFTY expiry · ${s.expiry.ifBlank { "Waiting" }}") }
-                DropdownMenu(expanded = expiryMenu, onDismissRequest = { expiryMenu = false }) {
-                    s.expiries.forEach { value -> DropdownMenuItem(text = { Text(value) },
-                        onClick = { c.expiry(value); expiryMenu = false }) }
+                TextButton(onClick = { expiryMenu = true }) { Text("${s.index} expiry · ${s.expiry}", fontSize = 12.sp) }
+                DropdownMenu(expiryMenu, { expiryMenu = false }) {
+                    s.expiries.forEach { expiry -> DropdownMenuItem(text = { Text(expiry) }, onClick = { c.expiry(expiry); expiryMenu = false }) }
                 }
             }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("CALL", color = Muted, fontSize = 11.sp)
+                Text("STRIKE", color = Muted, fontSize = 11.sp)
+                Text("PUT", color = Muted, fontSize = 11.sp)
+            }
         }
+        // One compact table contains all six strikes / twelve option contracts.
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("All", "Buying", "Sell Short").forEachIndexed { index, name ->
-                    FilterChip(selected = listMode == index, onClick = { listMode = index }, label = { Text(name, fontSize = 12.sp) })
-                }
-            }
-        }
-        if (rows.isEmpty()) item {
-            Text(if (s.quotes.isEmpty()) "Live quotes का इंतज़ार है।" else "इन शर्तों पर अभी कोई match नहीं है।", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 12.dp))
-        }
-        items(rows, key = { it.first.contract.token }) { (q, tick) ->
-            val valid = fresh(tick) && s.connected
-            val buy = valid && match(q, Direction.BUY)
-            val sell = valid && match(q, Direction.SELL_SHORT)
-            val accent = if (buy) Green else if (sell) Red else Muted
-            Card(colors = CardDefaults.cardColors(containerColor = Panel)) {
-                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Column {
-                            Text("${q.contract.strike} ${q.contract.side}", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            Text(q.contract.expiry, fontSize = 10.sp, color = Muted)
-                        }
-                        Text("₹${money(q.ltp)}", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = accent)
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                s.quotes.groupBy { it.first.contract.strike }.toSortedMap().forEach { (strike, rows) ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        OptionCell(rows.firstOrNull { it.first.contract.side == "CALL" }, signals, Modifier.weight(1f))
+                        Text(strike.toString(), fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.width(65.dp))
+                        OptionCell(rows.firstOrNull { it.first.contract.side == "PUT" }, signals, Modifier.weight(1f))
                     }
-                    Text("OPEN ₹${money(q.open)} · ${timeLabel(tick.exchangeMillis)} IST", fontSize = 10.sp, color = Muted)
-                    if (!valid) Text("Last available quote · no new signal", color = Muted, fontSize = 10.sp)
-                    if (buy || sell) Text(listOfNotNull("BUY MATCH".takeIf { buy }, "SELL SHORT MATCH".takeIf { sell }).joinToString(" / "), color = accent, fontSize = 11.sp)
+                }
+            }
+            if (s.quotes.isEmpty()) Text("Quotes का इंतज़ार · connection और expiry जाँचें", color = Muted, fontSize = 12.sp)
+            if (!live) Text(s.scanStatus.ifBlank { "Historical scan loading…" }, color = Muted, fontSize = 10.sp)
+            TextButton(onClick = c::reconnect) { Text("Refresh / retry data", fontSize = 11.sp) }
+        }
+        listOf(Direction.BUY, Direction.SELL_SHORT).forEach { direction ->
+            item {
+                HorizontalDivider()
+                Text(if (direction == Direction.BUY) "BEST BUY · LOCKED MATCHES" else "SELL SHORT · LOCKED MATCHES",
+                    color = if (direction == Direction.BUY) Green else Red, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+            val records = signals.filter { it.direction == direction }.sortedBy { it.time }
+            if (records.isEmpty()) item { Text("इस session में अभी कोई उपलब्ध match नहीं", color = Muted, fontSize = 11.sp) }
+            items(records, key = { it.key }) { signal ->
+                Card {
+                    Column(Modifier.fillMaxWidth().padding(10.dp)) {
+                        Text("${s.index} · ${signal.contract.strike} ${signal.contract.side} · ${signal.contract.expiry}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(if (signal.historical) "Candle reference ₹${money(signal.matchedPrice)}" else "LOCKED ₹${money(signal.matchedPrice)}",
+                            color = if (direction == Direction.BUY) Green else Red, fontSize = 17.sp)
+                        Text(signalTime(signal), fontSize = 12.sp)
+                        Text("Target ₹${money(signal.target)} · OPEN ₹${money(signal.openingPrice)}", color = Muted, fontSize = 10.sp)
+                        if (signal.historical) Text("Historical · one-minute OHLC · exact tick / fill unconfirmed", color = Muted, fontSize = 9.sp)
+                    }
                 }
             }
         }
-        item {
-            HorizontalDivider(color = Panel)
-            Text("LOCKED RECORDS", fontSize = 11.sp, color = Muted, modifier = Modifier.padding(top = 14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(historyMode == 0, { historyMode = 0 }, label = { Text("Best Buy") })
-                FilterChip(historyMode == 1, { historyMode = 1 }, label = { Text("Best Sell Short") })
-            }
+        item { Text("Scanner records · automatic orders नहीं लगते", color = Muted, fontSize = 10.sp) }
+    }
+}
+@Composable private fun OptionCell(row: Pair<Quote, Tick>?, signals: List<Signal>, modifier: Modifier) {
+    val matches = signals.filter { it.contract.token == row?.first?.contract?.token }
+    val buy = matches.any { it.direction == Direction.BUY }
+    val sell = matches.any { it.direction == Direction.SELL_SHORT }
+    val color = if (buy) Green else if (sell) Red else Muted
+    Card(modifier, colors = CardDefaults.cardColors(containerColor = if (buy) Color(0xFF123D32) else if (sell) Color(0xFF402535) else Panel)) {
+        Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+            Text("₹${money(row?.first?.ltp)}", color = color, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(if (buy) "BUY ✓" else if (sell) "SELL ✓" else "—", color = color, fontSize = 9.sp)
         }
-        if (history.isEmpty()) item { Text("अभी कोई locked match नहीं है।", fontSize = 13.sp, color = Muted, modifier = Modifier.padding(vertical = 12.dp)) }
-        items(history.reversed(), key = { it.key }) { signal ->
-            val current = s.quotes.firstOrNull { it.first.contract.token == signal.contract.token }
-            Card(colors = CardDefaults.cardColors(containerColor = Panel)) {
-                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text("${signal.contract.strike} ${signal.contract.side} · ${signal.contract.expiry}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Text("LOCKED ₹${money(signal.matchedPrice)}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = if (historyMode == 0) Green else Red)
-                    Text("Target ₹${money(signal.target)} · OPEN ₹${money(signal.openingPrice)}", fontSize = 11.sp, color = Muted)
-                    Text(signal.time, fontSize = 10.sp, color = Muted)
-                    Text("Current LTP ₹${money(current?.first?.ltp)}" +
-                        (if (current != null && (!s.connected || !fresh(current.second))) " · last available" else ""), fontSize = 12.sp)
-                }
-            }
-        }
-        item { Text("Scanner matches · कोई order अपने-आप नहीं लगता", fontSize = 10.sp, color = Muted, modifier = Modifier.padding(vertical = 10.dp)) }
     }
 }

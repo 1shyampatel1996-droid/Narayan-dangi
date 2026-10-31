@@ -88,7 +88,7 @@ internal object TickDecoder {
 internal class AngelApi {
     val http = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS).build()
-    private fun request(c: Credentials, path: String, session: LoginSession? = null, body: JSONObject? = null): JSONObject {
+    private fun request(c: Credentials, path: String, session: LoginSession? = null, body: JSONObject? = null, arrayData: Boolean = false): JSONObject {
         val builder = Request.Builder().url("https://apiconnect.angelone.in" + path)
             .header("X-PrivateKey", c.apiKey).header("X-UserType", "USER").header("X-SourceID", "WEB")
             .header("X-ClientLocalIP", "127.0.0.1").header("X-ClientPublicIP", "0.0.0.0")
@@ -105,7 +105,7 @@ internal class AngelApi {
                 throw BrokerError("Broker rejected request (${code.ifBlank { "unknown" }}). Check account setup or OTP.",
                     code in setOf("AG8001", "AG8002", "AG8003", "AB1010"))
             }
-            return json.getJSONObject("data")
+            return if (arrayData) JSONObject().put("candles", json.optJSONArray("data") ?: JSONArray()) else json.getJSONObject("data")
         }
     }
     fun login(c: Credentials, otp: String): LoginSession {
@@ -143,6 +143,19 @@ internal class AngelApi {
             }.getOrDefault(0L)
             Tick(instrument.key, price("open"), price("ltp"), timestamp, System.currentTimeMillis())
         }
+    }
+    fun candles(c: Credentials, s: LoginSession, item: Instrument, from: LocalDate, to: LocalDate,
+                interval: String = "ONE_MINUTE"): List<Candle> {
+        val data = request(c, "/rest/secure/angelbroking/historical/v1/getCandleData", s,
+            JSONObject().put("exchange", item.exchange).put("symboltoken", item.token)
+                .put("interval", interval).put("fromdate", "$from 09:15").put("todate", "$to 15:30"), true)
+            .getJSONArray("candles")
+        return (0 until data.length()).mapNotNull { i -> runCatching {
+            val row = data.getJSONArray(i)
+            Candle(OffsetDateTime.parse(row.getString(0)).toInstant().toEpochMilli(),
+                row.getString(1).toBigDecimal(), row.getString(2).toBigDecimal(),
+                row.getString(3).toBigDecimal(), row.getString(4).toBigDecimal())
+        }.getOrNull() }.sortedBy { it.millis }
     }
     fun logout(c: Credentials, s: LoginSession) {
         request(c, "/rest/secure/angelbroking/user/v1/logout", s, JSONObject().put("clientcode", c.clientId))

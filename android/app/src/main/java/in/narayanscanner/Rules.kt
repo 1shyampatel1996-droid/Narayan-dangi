@@ -7,7 +7,7 @@ data class Contract(val token: String, val strike: Int, val side: String, val ex
 data class Quote(val contract: Contract, val open: BigDecimal?, val ltp: BigDecimal?, val sessionDate: String)
 data class Signal(
     val key: String, val contract: Contract, val direction: Direction, val target: BigDecimal,
-    val matchedPrice: BigDecimal, val openingPrice: BigDecimal, val time: String, val sessionDate: String
+    val matchedPrice: BigDecimal, val openingPrice: BigDecimal, val time: String, val sessionDate: String, val historical: Boolean = false
 )
 object Rules {
     private val lower = BigDecimal("0.90")
@@ -34,5 +34,30 @@ object Rules {
         val key = listOf(quote.sessionDate, quote.contract.token, direction.name,
             target.stripTrailingZeros().toPlainString()).joinToString("|")
         return Signal(key, quote.contract, direction, target, quote.ltp!!, quote.open!!, time, quote.sessionDate)
+    }
+}
+
+// OHLC confirms the candle range, not the exact tick or execution price.
+data class Candle(val millis: Long, val open: BigDecimal, val high: BigDecimal, val low: BigDecimal, val close: BigDecimal)
+object HistoricalScan {
+    fun scan(contract: Contract, candles: List<Candle>, target: BigDecimal, direction: Direction): List<Signal> {
+        val sorted = candles.sortedBy { it.millis }
+        val opening = sorted.firstOrNull()?.open ?: return emptyList()
+        var inside = false
+        return sorted.mapNotNull { bar ->
+            val lower = target * BigDecimal("0.90")
+            val upper = target * BigDecimal("1.10")
+            val sampled = listOf(bar.open, bar.high, bar.low, bar.close).firstOrNull { it >= lower && it <= upper }
+            val hit = sampled != null && Rules.matches(target, opening, sampled, direction)
+            val entering = hit && !inside
+            inside = hit
+            if (!entering) null else {
+                val stamp = java.time.Instant.ofEpochMilli(bar.millis).atZone(java.time.ZoneId.of("Asia/Kolkata"))
+                val q = Quote(contract, opening, sampled, stamp.toLocalDate().toString())
+                Rules.signal(q, target, direction, stamp.toOffsetDateTime().toString())?.let {
+                    it.copy(key = it.key + "|history|" + bar.millis, historical = true)
+                }
+            }
+        }
     }
 }
