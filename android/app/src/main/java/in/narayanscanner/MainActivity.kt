@@ -28,7 +28,7 @@ private val Navy = Color(0xFF0B1220)
 private val Panel = Color(0xFF162237)
 private val Muted = Color(0xFFAAB7CC)
 private fun money(v: BigDecimal?) = v?.setScale(2, java.math.RoundingMode.HALF_UP)?.toPlainString() ?: "—"
-private fun timeLabel(millis: Long) = Instant.ofEpochMilli(millis).atZone(IST).format(DateTimeFormatter.ofPattern("dd MMM HH:mm:ss"))
+private fun timeLabel(millis: Long) = if (millis <= 0) "समय नहीं मिला" else Instant.ofEpochMilli(millis).atZone(IST).format(DateTimeFormatter.ofPattern("dd MMM HH:mm:ss"))
 private fun fresh(t: Tick): Boolean = System.currentTimeMillis() - t.exchangeMillis in 0..15000 &&
     Instant.ofEpochMilli(t.exchangeMillis).atZone(IST).toLocalDate() == LocalDate.now(IST)
 

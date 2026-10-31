@@ -44,6 +44,7 @@ internal class ScannerController(context: Context, private val render: (ScannerS
     private val latest = HashMap<String, Tick>()
     private val signalKeys = state.history.map { it.key }.toMutableSet()
     private var spot: BigDecimal? = null
+    private val seeded = HashSet<String>()
     private val clock = object : Runnable {
         override fun run() {
             synchronized(this@ScannerController) {
@@ -167,9 +168,10 @@ internal class ScannerController(context: Context, private val render: (ScannerS
         })
         selectContracts()
         socket?.connect()
+        seedQuotes(markets.mapNotNull { it.second })
         publish()
     }
-    @Synchronized private fun accept(tick: Tick) {
+    @Synchronized private fun accept(tick: Tick, streamed: Boolean = true) {
         if (!state.loggedIn || closed) return
         if (session?.let { Instant.now().epochSecond >= it.expires } != false) {
             invalidate("Session expired · log in again"); return
@@ -177,13 +179,13 @@ internal class ScannerController(context: Context, private val render: (ScannerS
         val old = latest[tick.key]
         if (old != null && tick.exchangeMillis < old.exchangeMillis) return
         latest[tick.key] = tick
-        state = state.copy(ticks = state.ticks + 1, connected = true, status = "Live feed connected")
+        if (streamed) state = state.copy(ticks = state.ticks + 1, connected = true, status = "Live feed connected")
         if (tick.key == markets.firstOrNull()?.second?.key && tick.ltp != null) {
             spot = tick.ltp
             selectContracts()
         }
         val item = selected.firstOrNull { it.key == tick.key }
-        if (item != null && fresh(tick)) {
+        if (streamed && item != null && fresh(tick)) {
             val quote = Quote(item.contract(), tick.open, tick.ltp, LocalDate.now(IST).toString())
             val stamp = Instant.ofEpochMilli(tick.exchangeMillis).atZone(IST).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
             val added = state.targets.mapIndexedNotNull { index, input ->
@@ -220,6 +222,24 @@ internal class ScannerController(context: Context, private val render: (ScannerS
             }.toSet()
         selected = options.filter { it.strike in strikes }.distinctBy { it.key }.sortedWith(compareBy({ it.strike }, { it.symbol }))
         socket?.subscribe(markets.mapNotNull { it.second } + selected)
+        seedQuotes(selected)
+    }
+    @Synchronized private fun seedQuotes(items: List<Instrument>) {
+        val missing = items.filter { it.key !in latest && seeded.add(it.key) }
+        if (missing.isEmpty()) return
+        val c = credentials ?: return
+        val s = session ?: return
+        val attempt = generation
+        io.execute {
+            runCatching { api.snapshot(c, s, missing) }.onSuccess { ticks ->
+                synchronized(this) { if (attempt == generation) ticks.forEach { accept(it, false) } }
+            }.onFailure { error ->
+                synchronized(this) {
+                    missing.forEach { seeded.remove(it.key) }
+                    if (attempt == generation && error is BrokerError && error.loginRequired) invalidate(error.message.orEmpty())
+                }
+            }
+        }
     }
     @Synchronized fun target(index: Int, text: String) {
         if (index !in 0..5 || !text.matches(Regex("[0-9]*\\.?[0-9]{0,2}")) || text.length > 12) return
@@ -242,7 +262,7 @@ internal class ScannerController(context: Context, private val render: (ScannerS
         if (instruments.isEmpty()) io.execute { loadFeed() } else startSocket()
     }
     @Synchronized private fun invalidate(message: String) {
-        generation++; socket?.close(); socket = null; session = null; latest.clear(); spot = null
+        generation++; socket?.close(); socket = null; session = null; latest.clear(); seeded.clear(); spot = null
         vault.clearSession()
         state = state.copy(loggedIn = false, busy = false, connected = false, quotes = emptyList(), status = message)
         publish()

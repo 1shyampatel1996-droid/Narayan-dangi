@@ -121,6 +121,29 @@ internal class AngelApi {
         return LoginSession(jwt, data.getString("feedToken"), now.epochSecond, minOf(midnight, expiry))
     }
     fun validate(c: Credentials, s: LoginSession) { request(c, "/rest/secure/angelbroking/user/v1/getProfile", s) }
+    fun snapshot(c: Credentials, s: LoginSession, instruments: List<Instrument>): List<Tick> {
+        if (instruments.isEmpty()) return emptyList()
+        val tokens = JSONObject()
+        instruments.groupBy { it.exchange }.forEach { (exchange, items) ->
+            tokens.put(exchange, JSONArray(items.map { it.token }.distinct()))
+        }
+        val data = request(c, "/rest/secure/angelbroking/market/v1/quote/", s,
+            JSONObject().put("mode", "FULL").put("exchangeTokens", tokens))
+        val fetched = data.optJSONArray("fetched") ?: return emptyList()
+        val dateFormat = java.time.format.DateTimeFormatterBuilder().parseCaseInsensitive()
+            .appendPattern("dd-MMM-yyyy HH:mm:ss").toFormatter(Locale.ENGLISH)
+        return (0 until fetched.length()).mapNotNull { index ->
+            val item = fetched.getJSONObject(index)
+            val instrument = instruments.firstOrNull {
+                it.exchange == item.optString("exchange") && it.token == item.optString("symbolToken")
+            } ?: return@mapNotNull null
+            fun price(name: String) = item.optString(name).toBigDecimalOrNull()?.takeIf { it.signum() > 0 }
+            val timestamp = runCatching {
+                LocalDateTime.parse(item.optString("exchFeedTime"), dateFormat).atZone(IST).toInstant().toEpochMilli()
+            }.getOrDefault(0L)
+            Tick(instrument.key, price("open"), price("ltp"), timestamp, System.currentTimeMillis())
+        }
+    }
     fun logout(c: Credentials, s: LoginSession) {
         request(c, "/rest/secure/angelbroking/user/v1/logout", s, JSONObject().put("clientcode", c.clientId))
     }
@@ -141,7 +164,8 @@ internal class AngelApi {
             } finally { tmp.delete() }
         }
         val result = mutableListOf<Instrument>()
-        val fmt = DateTimeFormatter.ofPattern("ddMMMyyyy", Locale.ENGLISH)
+        val fmt = java.time.format.DateTimeFormatterBuilder().parseCaseInsensitive()
+            .appendPattern("ddMMMyyyy").toFormatter(Locale.ENGLISH)
         JsonReader(file.reader()).use { reader ->
             reader.beginArray()
             while (reader.hasNext()) {

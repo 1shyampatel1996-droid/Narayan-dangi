@@ -20,7 +20,7 @@ Independent Kotlin / Jetpack Compose app. Existing Streamlit files are unchanged
   heartbeat and bounded reconnect. All received ticks are considered for signals.
   Screen updates coalesce to a 50 ms target without full-page reload.
 - Old-session or more-than-15-second-old quotes are shown as last available and cannot
-  create new signals. No REST polling loop, no order placement, no demo data.
+  create new signals. One initial REST snapshot per newly selected token supplies last available prices when the market is closed; these snapshots cannot create locked signals. No REST polling loop, no order placement, no demo data.
 - Credential backup and cleartext network traffic disabled.
 
 ## Build
