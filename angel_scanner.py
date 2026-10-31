@@ -111,12 +111,40 @@ def open_code(value):
     return f"{total:02d}{digit(total)}"
 
 
+def saved_credentials(secrets):
+    aliases = {
+        "ANGEL_API_KEY": ("ANGEL_API_KEY", "API_KEY", "APIKEY"),
+        "ANGEL_CLIENT_ID": ("ANGEL_CLIENT_ID", "CLIENT_ID", "CLIENT_CODE", "CLIENTCODE"),
+        "ANGEL_PIN": ("ANGEL_PIN", "PIN", "MPIN", "PASSWORD"),
+        "ANGEL_TOTP_SECRET": ("ANGEL_TOTP_SECRET", "TOTP_SECRET", "TOTP_KEY", "TOTP"),
+    }
+    def normalized(key):
+        return "".join(c for c in str(key).upper() if c.isalnum())
+
+    sources = [secrets]
+    for section in ("angel", "angel_one", "angelone", "smartapi", "ANGEL", "ANGEL_ONE", "SMARTAPI"):
+        nested = secrets.get(section)
+        if hasattr(nested, "items"):
+            sources.append(nested)
+    values = {}
+    for target, names in aliases.items():
+        values[target] = ""
+        for source in sources:
+            entries = {normalized(k): v for k, v in source.items()
+                       if not hasattr(v, "items")}
+            for name in names:
+                value = entries.get(normalized(name))
+                if value is not None and str(value).strip():
+                    values[target] = str(value).strip()
+                    break
+            if values[target]:
+                break
+    return values
+
+
 def read_credentials():
     try:
-        values = {
-            name: str(st.secrets.get(name, "")).strip()
-            for name in SECRET_NAMES
-        }
+        values = saved_credentials(st.secrets)
     except Exception:
         values = {}
 
