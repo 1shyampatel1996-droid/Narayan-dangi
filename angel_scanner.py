@@ -120,35 +120,49 @@ def read_credentials():
     except Exception:
         values = {}
 
-    if all(values.get(name) for name in SECRET_NAMES):
-        return values
-
-    st.info("Angel One की जानकारी भरें और Login दबाएँ।")
-
-    with st.form("angel_login_form"):
-        api_key = st.text_input("SmartAPI API key", type="password")
-        client_id = st.text_input("Angel One Client ID")
-        pin = st.text_input("Angel One PIN", type="password")
-        secret = st.text_input(
-            "TOTP setup secret — 6 अंक वाला OTP नहीं",
-            type="password",
+    if not values.get("ANGEL_API_KEY") or not values.get("ANGEL_CLIENT_ID"):
+        st.info(
+            "एक बार सेटअप बाकी है। Manage app → Settings → Secrets में "
+            "ANGEL_API_KEY और ANGEL_CLIENT_ID सेव करें। "
+            "केवल OTP से Login के लिए ANGEL_PIN भी सेव करें; "
+            "केवल PIN से Login के लिए ANGEL_TOTP_SECRET सेव करें।"
         )
-        submitted = st.form_submit_button("Login")
+        st.stop()
+
+    has_totp = bool(values.get("ANGEL_TOTP_SECRET"))
+    has_pin = bool(values.get("ANGEL_PIN"))
+    if not has_totp and not has_pin:
+        st.info(
+            "एक बॉक्स वाला Login चालू करने के लिए Secrets में "
+            "ANGEL_PIN या ANGEL_TOTP_SECRET सेव करें।"
+        )
+        st.stop()
+
+    # Always ask for a fresh factor before opening a broker session.
+    pin_mode = has_totp and not has_pin
+    field_key = "angel_login_factor"
+    with st.form("angel_login_form", clear_on_submit=True):
+        factor = st.text_input(
+            "Angel One PIN" if pin_mode else "Authenticator का 6 अंक वाला code",
+            type="password",
+            key=field_key,
+            max_chars=16 if pin_mode else 6,
+        )
+        submitted = st.form_submit_button("Login", use_container_width=True)
 
     if not submitted:
         st.stop()
-
-    values = {
-        "ANGEL_API_KEY": api_key.strip(),
-        "ANGEL_CLIENT_ID": client_id.strip(),
-        "ANGEL_PIN": pin.strip(),
-        "ANGEL_TOTP_SECRET": secret.strip(),
-    }
-
-    if not all(values.values()):
-        st.error("चारों बॉक्स भरें।")
-        st.stop()
-
+    factor = factor.strip()
+    if pin_mode:
+        if not factor or not factor.isascii() or not factor.isdigit():
+            st.error("अपना Angel One PIN डालें।")
+            st.stop()
+        values["ANGEL_PIN"] = factor
+    else:
+        if len(factor) != 6 or not factor.isascii() or not factor.isdigit():
+            st.error("Authenticator का छह अंकों वाला नया code डालें।")
+            st.stop()
+        values["ANGEL_OTP"] = factor
     return values
 
 
@@ -169,8 +183,10 @@ def connect():
             timeout=12,
         )
 
-        secret = values["ANGEL_TOTP_SECRET"].replace(" ", "")
-        otp = pyotp.TOTP(secret).now()
+        otp = values.get("ANGEL_OTP")
+        if not otp:
+            secret = values["ANGEL_TOTP_SECRET"].replace(" ", "")
+            otp = pyotp.TOTP(secret).now()
 
         result = client.generateSession(
             values["ANGEL_CLIENT_ID"],
@@ -183,8 +199,8 @@ def connect():
 
     except Exception:
         st.error(
-            "Login नहीं हुआ। API key, Client ID, PIN और "
-            "TOTP setup secret जाँचकर फिर Login करें।"
+            "Login नहीं हुआ। PIN या नया authenticator code जाँचें। "
+            "समस्या बनी रहे तो Secrets में सेव जानकारी जाँचें।"
         )
         st.stop()
 
