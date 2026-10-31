@@ -47,10 +47,14 @@ internal class ScannerController(context: Context, private val render: (ScannerS
     private val latest = HashMap<String, Tick>()
     private val signalKeys = state.history.map { it.key }.toMutableSet()
     private val candleCache = HashMap<String, List<Candle>>()
+    private var candleRevision = 0L
+    private var historicalSignature = ""
+    private var cachedHistorical = emptyList<Signal>()
     private val candlePending = HashSet<String>()
     private val candleAttempted = HashSet<String>()
-    private val activeMatches = HashSet<String>()
+    private val candleFetchedAt = HashMap<String, Long>()
     private val sessionDays = HashMap<String, LocalDate>()
+    private val confirmedDays = HashMap<String, LocalDate>()
     private val settings = HashMap<String, Triple<String, String, List<String>>>()
     private val expirySettings = HashMap<String, String>()
     private var spot: BigDecimal? = null
@@ -205,22 +209,13 @@ internal class ScannerController(context: Context, private val render: (ScannerS
         if (streamed && item != null && fresh(tick)) {
             val quote = Quote(item.contract(), tick.open, tick.ltp, LocalDate.now(IST).toString())
             val stamp = Instant.ofEpochMilli(tick.exchangeMillis).atZone(IST).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-            config(item.name).third.forEachIndexed { i, input ->
-                val target = input.toBigDecimalOrNull() ?: return@forEachIndexed
-                val dir = if (i < 4) Direction.BUY else Direction.SELL_SHORT
-                if (!Rules.matches(target, quote.open, quote.ltp, dir)) activeMatches.remove(
-                    listOf(quote.sessionDate, quote.contract.token, dir.name, target.stripTrailingZeros().toPlainString()).joinToString("|"))
-            }
             val added = config(item.name).third.mapIndexedNotNull { index, input ->
                 val target = input.toBigDecimalOrNull() ?: return@mapIndexedNotNull null
                 Rules.signal(quote, target, if (index < 4) Direction.BUY else Direction.SELL_SHORT, stamp)
-                    ?.let { signal ->
-                        if (!activeMatches.add(signal.key)) null
-                        else signal.copy(key = signal.key + "|live|" + tick.exchangeMillis).takeIf { signalKeys.add(it.key) }
-                    }
+                    ?.takeIf { signalKeys.add(it.key) }
             }
             if (added.isNotEmpty()) {
-                state = state.copy(history = state.history + added)
+                state = state.copy(history = SignalRecords.merge(state.history + added))
                 val history = state.history
                 io.execute { writeHistory(history) }
             }
@@ -276,7 +271,7 @@ internal class ScannerController(context: Context, private val render: (ScannerS
         if (index !in 0..5 || !text.matches(Regex("[0-9]*\\.?[0-9]{0,2}")) || text.length > 12) return
         state = state.copy(targets = state.targets.toMutableList().apply { this[index] = text })
         prefs.edit().putString("${state.index}_target_$index", text).apply()
-        rememberConfig(); rescan()
+        rememberConfig(); loadHistoryCandles(); rescan()
         publish()
     }
     @Synchronized fun digit(index: Int, value: String) {
@@ -284,7 +279,7 @@ internal class ScannerController(context: Context, private val render: (ScannerS
         state = if (index == 0) state.copy(digit1 = value) else state.copy(digit2 = value)
         prefs.edit().putString("${state.index}_" + if (index == 0) "digit1" else "digit2", value).apply()
         rememberConfig()
-        selectContracts(); publish()
+        selectContracts(); rescan(); publish()
     }
     @Synchronized fun expiry(value: String) {
         if (value !in state.expiries) return
@@ -316,21 +311,36 @@ internal class ScannerController(context: Context, private val render: (ScannerS
             expiry = expiry, expiries = expiries)
         selectContracts(); rescan(); publish()
     }
-    private fun historicalMatches(): List<Signal> = selected.filter { it.name == state.index }.flatMap { item ->
-        val day = sessionDays[item.name] ?: return@flatMap emptyList()
-        val bars = candleCache["${item.key}|$day"] ?: return@flatMap emptyList()
-        state.targets.flatMapIndexed { i, input -> input.toBigDecimalOrNull()?.let {
-            HistoricalScan.scan(item.contract(), bars, it, if (i < 4) Direction.BUY else Direction.SELL_SHORT)
-        } ?: emptyList() }
-    }.distinctBy { it.key }.sortedBy { it.time }
+    private fun scanDay(index: String): LocalDate? {
+        val tick = markets.firstOrNull { it.first == index }?.second?.let { latest[it.key] }
+        // A current-day feed confirms today's session. A stale/holiday feed uses the last completed session.
+        val today = LocalDate.now(IST)
+        if (tick != null && fresh(tick)) confirmedDays[index] = today
+        return confirmedDays[index]?.takeIf { it == today } ?: sessionDays[index]
+    }
+    private fun historicalMatches(): List<Signal> {
+        val day = scanDay(state.index) ?: return emptyList()
+        val items = selected.filter { it.name == state.index }
+        val signature = listOf(state.index, day, state.targets, items.map { it.key }, candleRevision).joinToString("|")
+        if (signature == historicalSignature) return cachedHistorical
+        historicalSignature = signature
+        cachedHistorical = items.flatMap { item ->
+            val bars = candleCache["${item.key}|$day"] ?: return@flatMap emptyList()
+            state.targets.flatMapIndexed { i, input -> input.toBigDecimalOrNull()?.let {
+                HistoricalScan.scan(item.contract(), bars, it, if (i < 4) Direction.BUY else Direction.SELL_SHORT)
+            } ?: emptyList() }
+        }.distinctBy { it.key }.sortedBy { it.time }
+        return cachedHistorical
+    }
     private fun rescan() {
         state = state.copy(historical = historicalMatches())
         historySave?.let { main.removeCallbacks(it) }
         val save = Runnable { synchronized(this) {
             if (!closed) {
-                val added = historicalMatches().filter { signalKeys.add(it.key) }
-                if (added.isNotEmpty()) {
-                    state = state.copy(history = state.history + added)
+                val merged = SignalRecords.merge(state.history + historicalMatches())
+                if (merged != state.history) {
+                    state = state.copy(history = merged)
+                    signalKeys.clear(); signalKeys.addAll(merged.map { it.key })
                     val snapshot = state.history
                     io.execute { writeHistory(snapshot) }
                 }
@@ -370,41 +380,51 @@ internal class ScannerController(context: Context, private val render: (ScannerS
         val s = session ?: return
         val attempt = generation
         selected.forEach { item ->
-            val day = sessionDays[item.name] ?: return@forEach
+            val day = scanDay(item.name) ?: return@forEach
             val key = "${item.key}|$day"
-            if (key in candleCache || !candleAttempted.add(key) || !candlePending.add(key)) return@forEach
-            state = state.copy(scanStatus = "Loading last session · $day · one-minute data…")
+            val currentDay = day == LocalDate.now(IST)
+            if (key in candlePending) return@forEach
+            if (currentDay) {
+                // Refresh current-session backfill without freezing it at the first digit selection.
+                if (System.currentTimeMillis() - (candleFetchedAt[key] ?: 0L) < 60000) return@forEach
+            } else if (key in candleCache || key in candleAttempted) return@forEach
+            candleAttempted.add(key); candlePending.add(key)
+            candleFetchedAt[key] = System.currentTimeMillis()
+            state = state.copy(scanStatus = "Loading session · $day · first matches from one-minute data…")
             io.execute {
                 val file = java.io.File(app.cacheDir, "candles-${item.exchangeType}-${item.token}-$day.json")
                 runCatching {
-                    val bars = if (file.exists()) {
+                    val bars = if (!currentDay && file.exists()) {
                         val rows = JSONArray(file.readText())
                         (0 until rows.length()).map { i -> val r = rows.getJSONArray(i)
                             Candle(r.getLong(0), r.getString(1).toBigDecimal(), r.getString(2).toBigDecimal(), r.getString(3).toBigDecimal(), r.getString(4).toBigDecimal()) }
                     } else {
                         Thread.sleep(400)
                         api.candles(c, s, item, day, day).also { rows ->
-                            if (rows.isNotEmpty()) file.writeText(JSONArray().apply { rows.forEach {
+                            if (!currentDay && rows.isNotEmpty()) file.writeText(JSONArray().apply { rows.forEach {
                                 put(JSONArray(listOf(it.millis, it.open.toPlainString(), it.high.toPlainString(), it.low.toPlainString(), it.close.toPlainString())))
                             } }.toString())
                         }
                     }
                     if (bars.isEmpty()) throw BrokerError("No candles returned for ${item.symbol} on $day")
                     synchronized(this) { if (attempt == generation && !closed) {
-                        candleCache[key] = bars
-                        state = state.copy(scanStatus = "Last session $day · one-minute OHLC matches · exact tick time unavailable")
+                        candleCache[key] = bars; candleRevision++
+                        state = state.copy(scanStatus = "Session $day · first one-minute OHLC matches · exact tick time unavailable")
                         rescan()
                     } }
                 }.onFailure { error -> synchronized(this) { if (attempt == generation) {
                     state = state.copy(scanStatus = "Historical data incomplete: ${safeError(error)}"); publish()
                 } } }
-                synchronized(this) { candlePending.remove(key) }
+                synchronized(this) {
+                    candlePending.remove(key)
+                    if (attempt != generation) { candleAttempted.remove(key); candleFetchedAt.remove(key) }
+                }
             }
         }
     }
     @Synchronized fun reconnect() {
         if (!state.loggedIn) { state = state.copy(checking = false); publish(); return }
-        candleAttempted.clear()
+        candleAttempted.clear(); candleFetchedAt.clear()
         if (instruments.isEmpty()) io.execute { loadFeed() } else startSocket()
     }
     @Synchronized private fun invalidate(message: String) {
@@ -449,7 +469,7 @@ internal class ScannerController(context: Context, private val render: (ScannerS
                             Instant.ofEpochMilli(tick.exchangeMillis).atZone(IST).toLocalDate().toString()) to tick
                     },
                     historical = historicalMatches(),
-                    sessionDate = sessionDays[state.index]?.toString().orEmpty()
+                    sessionDate = scanDay(state.index)?.toString().orEmpty()
                 )
                 render(state)
             }
@@ -460,12 +480,12 @@ internal class ScannerController(context: Context, private val render: (ScannerS
     }
     private fun readHistory(): List<Signal> = runCatching {
         val a = JSONArray(prefs.getString("locked_v2", "[]"))
-        (0 until a.length()).map { index ->
+        SignalRecords.merge((0 until a.length()).map { index ->
             val s = a.getJSONObject(index)
             Signal(s.getString("key"), Contract(s.getString("token"), s.getInt("strike"), s.getString("side"), s.getString("expiry")),
                 Direction.valueOf(s.getString("direction")), s.getString("target").toBigDecimal(),
                 s.getString("price").toBigDecimal(), s.getString("open").toBigDecimal(), s.getString("time"), s.getString("day"), s.optBoolean("historical"))
-        }
+        })
     }.getOrDefault(emptyList())
     private fun writeHistory(history: List<Signal>) {
         val array = JSONArray()

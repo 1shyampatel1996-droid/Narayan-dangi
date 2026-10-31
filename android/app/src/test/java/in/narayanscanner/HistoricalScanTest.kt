@@ -19,8 +19,8 @@ class HistoricalScanTest {
         val reentry = listOf(bar(60000,"100","101","99","100"), bar(120000,"82","84","80","83"),
             bar(180000,"83","84","80","83"), bar(240000,"95","96","94","95"), bar(300000,"82","84","80","83"))
         val hits = HistoricalScan.scan(contract, reentry, d("80"), Direction.BUY)
-        assertEquals(2, hits.size)
-        assertNotEquals(hits[0].key, hits[1].key)
+        assertEquals(1, hits.size)
+        assertEquals(d("82"), hits.single().matchedPrice)
     }
     @Test fun doesNotInventTradeFromRangeOnly() {
         val bars = listOf(bar(60000,"100","105","60","100"))

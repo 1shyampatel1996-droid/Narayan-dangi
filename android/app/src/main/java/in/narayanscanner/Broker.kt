@@ -146,9 +146,11 @@ internal class AngelApi {
     }
     fun candles(c: Credentials, s: LoginSession, item: Instrument, from: LocalDate, to: LocalDate,
                 interval: String = "ONE_MINUTE"): List<Candle> {
+        val endTime = if (to == LocalDate.now(IST))
+            minOf(LocalTime.now(IST), LocalTime.of(15, 30)).format(DateTimeFormatter.ofPattern("HH:mm")) else "15:30"
         val data = request(c, "/rest/secure/angelbroking/historical/v1/getCandleData", s,
             JSONObject().put("exchange", item.exchange).put("symboltoken", item.token)
-                .put("interval", interval).put("fromdate", "$from 09:15").put("todate", "$to 15:30"), true)
+                .put("interval", interval).put("fromdate", "$from 09:15").put("todate", "$to $endTime"), true)
             .getJSONArray("candles")
         return (0 until data.length()).mapNotNull { i -> runCatching {
             val row = data.getJSONArray(i)

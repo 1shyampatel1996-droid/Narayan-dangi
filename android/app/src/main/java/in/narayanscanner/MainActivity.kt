@@ -123,18 +123,18 @@ private fun signalTime(s: Signal): String = runCatching {
     OffsetDateTime.parse(s.time).atZoneSameInstant(IST).format(DateTimeFormatter.ofPattern("dd MMM, h:mm a")) + " IST"
 }.getOrDefault(s.time)
 @Composable private fun Dashboard(s: ScannerState, c: ScannerController) {
-    val live = s.markets.firstOrNull { it.first == s.index }?.second?.let { fresh(it) } == true
-    val signals = (s.history.filter { signal ->
-        signal.contract.token.startsWith(if (s.index == "SENSEX") "4:" else "2:") &&
-            signal.sessionDate == (if (live) LocalDate.now(IST).toString() else s.sessionDate)
-    } + if (live) emptyList() else s.historical).distinctBy { it.key }
+    val live = s.connected && s.markets.firstOrNull { it.first == s.index }?.second?.let { fresh(it) } == true
+    val signals = SignalRecords.merge(s.history + s.historical).filter { signal ->
+        SignalRecords.visible(signal, if (s.index == "SENSEX") "4:" else "2:",
+            s.sessionDate, s.expiry, listOfNotNull(s.digit1.toIntOrNull(), s.digit2.toIntOrNull()).toSet(), s.targets)
+    }
     var inputs by rememberSaveable { mutableStateOf(true) }
     var expiryMenu by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
         contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Branding("DIGIT SCANNER · 0.2.1")
+                Branding("DIGIT SCANNER · 2.1.1")
                 TextButton(onClick = c::logout) { Text("Logout", color = Muted) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -174,7 +174,7 @@ private fun signalTime(s: Signal): String = runCatching {
                     }
                 }
             }
-            Text("Auto saved · ±10% · Buy OPEN >110% · Sell OPEN <90%", color = Muted, fontSize = 9.sp)
+            Text("Auto saved · एक strike + target भाव = एक पहला match · ±10%", color = Muted, fontSize = 9.sp)
         }
         item {
             Box {
@@ -202,7 +202,7 @@ private fun signalTime(s: Signal): String = runCatching {
                 }
             }
             if (s.quotes.isEmpty()) Text("Quotes का इंतज़ार · connection और expiry जाँचें", color = Muted, fontSize = 12.sp)
-            if (!live) Text(s.scanStatus.ifBlank { "Historical scan loading…" }, color = Muted, fontSize = 10.sp)
+            Text(s.scanStatus.ifBlank { "First-match scan loading…" }, color = Muted, fontSize = 10.sp)
             TextButton(onClick = c::reconnect) { Text("Refresh / retry data", fontSize = 11.sp) }
         }
         listOf(Direction.BUY, Direction.SELL_SHORT).forEach { direction ->
