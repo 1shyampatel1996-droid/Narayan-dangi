@@ -1,0 +1,51 @@
+name: Android device check
+on:
+  push:
+    branches: [android-native-scanner]
+    paths: ['.github/workflows/android-device-check.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  phone:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: false
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 41182677654
+          name: narayan-scanner-OFFLINE-PREVIEW
+          path: apk
+      - name: Enable emulator acceleration
+        run: sudo chmod 666 /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          disable-animations: true
+          script: |
+            adb install -r apk/app-debug.apk
+            adb shell am start -W -n in.narayanscanner/.MainActivity
+            sleep 5
+            adb shell pidof in.narayanscanner
+            adb exec-out screencap -p > login-screen.png
+            adb logcat -d -s AndroidRuntime:E > startup-log.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-device-check
+          path: |
+            login-screen.png
+            startup-log.txt
