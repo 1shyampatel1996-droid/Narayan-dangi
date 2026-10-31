@@ -7,7 +7,7 @@ android {
     namespace = "in.narayanscanner"
     compileSdk = 35
     defaultConfig {
-        applicationId = "in.narayanscanner.v2"
+        applicationId = "in.narayanscanner.v211"
         minSdk = 26
         targetSdk = 35
         versionCode = 4
