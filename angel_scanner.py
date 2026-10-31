@@ -1,5 +1,6 @@
 import math
 import time
+import threading
 from datetime import datetime
 from html import escape
 from zoneinfo import ZoneInfo
@@ -9,6 +10,7 @@ import pyotp
 import requests
 import streamlit as st
 from SmartApi import SmartConnect
+from SmartApi.smartWebSocketV2 import SmartWebSocketV2
 
 
 st.set_page_config(
@@ -199,10 +201,98 @@ def read_credentials():
     return values
 
 
+class LiveFeed:
+    EXCHANGES = {"NSE": 1, "NFO": 2, "BSE": 3, "BFO": 4}
+    def __init__(self, client, values, result):
+        self.lock = threading.RLock()
+        self.data, self.wanted, self.active = {}, set(), set()
+        self.ready, self.closed = False, False
+        self.last_tick, self.last_used = 0.0, time.monotonic()
+        self.ws = SmartWebSocketV2(result["data"]["jwtToken"],
+            values["ANGEL_API_KEY"], values["ANGEL_CLIENT_ID"],
+            client.getfeedToken(), max_retry_attempt=3)
+        self.ws.on_open, self.ws.on_data = self.on_open, self.on_data
+        self.ws.on_error, self.ws.on_close = self.on_close, self.on_close
+        threading.Thread(target=self.run, daemon=True).start()
+        threading.Thread(target=self.watch, daemon=True).start()
+
+    def run(self):
+        try:
+            self.ws.connect()
+        except Exception:
+            self.ready = False
+
+    def watch(self):
+        while not self.closed:
+            time.sleep(30)
+            if time.monotonic() - self.last_used > 120:
+                self.close()
+
+    def close(self):
+        self.closed, self.ready = True, False
+        try:
+            self.ws.close_connection()
+        except Exception:
+            pass
+
+    def on_close(self, *args):
+        self.ready = False
+
+    def on_open(self, *args):
+        with self.lock:
+            self.ready = True
+            self.active.clear()
+        self.subscribe([])
+
+    def subscribe(self, instruments):
+        with self.lock:
+            self.last_used = time.monotonic()
+            for item in instruments:
+                if item is not None and str(item["exch_seg"]) in self.EXCHANGES:
+                    self.wanted.add((str(item["exch_seg"]), str(item["token"])))
+            pending = self.wanted - self.active
+            if not self.ready or not pending:
+                return
+            groups = {}
+            for exchange, token in pending:
+                groups.setdefault(self.EXCHANGES[exchange], []).append(token)
+            try:
+                self.ws.subscribe("scanner", 2, [
+                    {"exchangeType": exchange, "tokens": tokens}
+                    for exchange, tokens in groups.items()])
+                self.active.update(pending)
+            except Exception:
+                self.ready = False
+
+    def on_data(self, wsapp, message):
+        try:
+            exchange = {v:k for k,v in self.EXCHANGES.items()}[int(message["exchange_type"])]
+            quote = {
+                "exchange": exchange, "symbolToken": str(message["token"]),
+                "ltp": float(message["last_traded_price"]) / 100,
+                "open": float(message.get("open_price_of_the_day", 0)) / 100,
+                "exchFeedTime": datetime.fromtimestamp(
+                    float(message["exchange_timestamp"]) / 1000, IST
+                ).strftime("%d-%b-%Y %H:%M:%S"),
+            }
+            with self.lock:
+                self.data[(exchange, quote["symbolToken"])] = quote
+                self.last_tick = time.monotonic()
+        except (KeyError, TypeError, ValueError, OverflowError):
+            pass
+
+    def snapshot(self):
+        with self.lock:
+            return dict(self.data)
+
+
 def connect():
     today = datetime.now(IST).date().isoformat()
 
     if st.session_state.get("angel_login_day") != today:
+        old_feed = st.session_state.pop("angel_feed", None)
+        if old_feed:
+            old_feed.close()
         st.session_state.pop("angel_client", None)
 
     if "angel_client" in st.session_state:
@@ -237,6 +327,10 @@ def connect():
         )
         st.stop()
 
+    try:
+        st.session_state["angel_feed"] = LiveFeed(client, values, result)
+    except Exception:
+        st.session_state["angel_feed"] = None
     st.session_state["angel_client"] = client
     st.session_state["angel_login_day"] = today
     st.rerun()
@@ -335,36 +429,39 @@ def quotes(client, instruments):
     if not exchange_tokens:
         return {}
 
-    last_request = st.session_state.get("last_quote", 0.0)
-    remaining = 1.1 - (time.monotonic() - last_request)
-
-    if remaining > 0:
-        time.sleep(remaining)
-
-    st.session_state["last_quote"] = time.monotonic()
-
+    feed = st.session_state.get("angel_feed")
+    cached = st.session_state.setdefault("quote_cache", {})
+    if feed:
+        feed.subscribe(instruments)
+        streamed = feed.snapshot()
+        cached.update(streamed)
+        if feed.ready and time.monotonic() - feed.last_tick < 15 and all(
+            (exchange, token) in streamed
+            for exchange, tokens in exchange_tokens.items() for token in tokens
+        ):
+            return dict(cached)
+    now = time.monotonic()
+    if now - st.session_state.get("last_quote", -100.0) < 1.2:
+        return dict(cached)
+    keys = {(exchange, token) for exchange, tokens in exchange_tokens.items() for token in tokens}
+    attempts = st.session_state.setdefault("quote_attempts", {})
+    if all(now - attempts.get(key, -100.0) < 15 for key in keys):
+        return dict(cached)
+    st.session_state["last_quote"] = now
+    for key in keys:
+        attempts[key] = now
     try:
         result = client.getMarketData("FULL", exchange_tokens)
-
         if not isinstance(result, dict) or not result.get("status"):
             raise RuntimeError("Quotes rejected")
-
-        data = result.get("data") or {}
-        fetched = data.get("fetched") or []
-
-        return {
-            (
-                str(item.get("exchange")),
-                str(item.get("symbolToken")),
-            ): item
-            for item in fetched
-        }
-
+        for item in (result.get("data") or {}).get("fetched") or []:
+            cached[(str(item.get("exchange")), str(item.get("symbolToken")))] = item
+        if feed and time.monotonic() - feed.last_tick < 15:
+            cached.update(feed.snapshot())
     except Exception:
-        raise RuntimeError(
-            "Angel One से भाव नहीं मिले। Refresh करें; "
-            "समस्या बनी रहे तो दोबारा Login करें।"
-        ) from None
+        if not cached:
+            raise RuntimeError("Angel One से भाव नहीं मिले। फिर प्रयास करें।") from None
+    return dict(cached)
 
 
 def get_quote(data, instrument):
@@ -420,6 +517,11 @@ def highlight(row):
 st.markdown("#### 📊 Angel Digit Scanner")
 
 if st.button("दोबारा Login"):
+    old_feed = st.session_state.pop("angel_feed", None)
+    if old_feed:
+        old_feed.close()
+    st.session_state.pop("quote_cache", None)
+    st.session_state.pop("quote_attempts", None)
     st.session_state.pop("angel_client", None)
     st.session_state.pop("angel_login_day", None)
     st.rerun()
@@ -427,7 +529,7 @@ if st.button("दोबारा Login"):
 client = connect()
 
 
-@st.fragment(run_every="10s")
+@st.fragment(run_every=0.25)
 def dashboard():
     today = datetime.now(IST).date()
 
@@ -668,8 +770,14 @@ def dashboard():
     st.caption(
         f"NIFTY {spot:,.2f} · "
         f"जाँच {datetime.now(IST).strftime('%H:%M:%S')} IST · "
-        "हर 10 सेकंड refresh · भाव 0 = target बंद"
+        "स्क्रीन अपडेट 250 ms · भाव 0 = target बंद"
     )
+
+    feed = st.session_state.get("angel_feed")
+    if not feed or not feed.ready:
+        st.caption("Live feed जुड़ रही है या उपलब्ध नहीं है; REST fallback चालू है।")
+    elif time.monotonic() - feed.last_tick > 15:
+        st.caption("नया live tick नहीं आया; आखिरी उपलब्ध भाव दिख रहे हैं।")
 
     st.caption(
         "हरा रंग = मौजूदा premium का target से ±10% match। "
