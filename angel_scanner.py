@@ -53,6 +53,7 @@ div[data-testid="stColumn"] {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 4px;
+    margin-bottom: 1rem;
 }
 .market-card {
     border: 1px solid #687184;
@@ -60,6 +61,8 @@ div[data-testid="stColumn"] {
     padding: 7px 2px;
     text-align: center;
     overflow-wrap: anywhere;
+    min-height: 145px;
+    box-sizing: border-box;
 }
 .market-name {
     font-size: 10px;
@@ -75,6 +78,8 @@ div[data-testid="stColumn"] {
 }
 .market-time {
     font-size: 9px;
+    line-height: 1.4;
+    margin-top: 6px;
     opacity: .7;
 }
 </style>
@@ -234,6 +239,7 @@ def connect():
 
     st.session_state["angel_client"] = client
     st.session_state["angel_login_day"] = today
+    st.rerun()
     return client
 
 
